@@ -108,7 +108,7 @@ fn main() {
 
 fn create_rounded_rect_shape(w: i32, h: i32, r: i32) -> RgbImage {
     let r = r.min(w / 2).min(h / 2);
-    let mut data = Vec::with_capacity((w * h) as usize);
+    let mut data = Vec::with_capacity((w * h * 4) as usize);
     for y in 0..h {
         for x in 0..w {
             let inside = if x < r && y < r {
@@ -130,11 +130,8 @@ fn create_rounded_rect_shape(w: i32, h: i32, r: i32) -> RgbImage {
             } else {
                 true
             };
-            if inside {
-                data.push(255);
-            } else {
-                data.push(0);
-            }
+            let alpha = if inside { 255u8 } else { 0u8 };
+            data.extend_from_slice(&[255, 255, 255, alpha]);
         }
     }
     RgbImage::new(&data, w, h, ColorDepth::Rgba8).unwrap()
