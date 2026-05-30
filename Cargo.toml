@@ -4,9 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-eframe = { version = "0.34", features = ["glow"] }
-egui = "0.34"
+fltk = "1.4"
 tray-icon = "0.24"
-winit = "0.30"
 log = "0.4"
 windows-sys = "0.61"
