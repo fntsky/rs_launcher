@@ -12,6 +12,7 @@ fn main() -> eframe::Result<()> {
             .with_inner_size([600.0, 400.0])
             .with_resizable(false)
             .with_title("RS Launcher"),
+        renderer: eframe::Renderer::Glow,
         centered: true,
         ..Default::default()
     };
