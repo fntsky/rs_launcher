@@ -47,7 +47,7 @@ fn main() {
     title.set_label_color(fltk::enums::Color::from_hex(0x88a4cc));
     title.set_label_font(fltk::enums::Font::HelveticaBold);
 
-    let mut input = Input::default().with_size(0, 36);
+    let mut input = Input::default().with_size(0, 28);
     input.set_frame(fltk::enums::FrameType::RFlatBox);
     input.set_color(fltk::enums::Color::from_hex(0x2a2a30));
     input.set_text_color(fltk::enums::Color::from_hex(0xe0e0e0));
