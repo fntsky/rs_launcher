@@ -50,6 +50,11 @@ fn main() {
     title.set_label_color(fltk::enums::Color::from_hex(0x88a4cc));
     title.set_label_font(fltk::enums::Font::HelveticaBold);
 
+    let mut input_wrap = Flex::default();
+    input_wrap.set_type(fltk::group::FlexType::Row);
+    input_wrap.set_pad(0);
+    input_wrap.set_margin(8);
+
     let mut input = Input::default();
     input.set_frame(fltk::enums::FrameType::RFlatBox);
     input.set_color(fltk::enums::Color::from_hex(0x2a2a30));
@@ -59,6 +64,8 @@ fn main() {
     input.set_selection_color(fltk::enums::Color::from_hex(0x4a90d9));
     input.set_cursor_color(fltk::enums::Color::from_hex(0x6ea8e0));
     input.set_tooltip("Type to search...");
+
+    input_wrap.end();
 
     let mut divider = Frame::default();
     divider.set_color(fltk::enums::Color::from_hex(0x3a3a42));
@@ -76,7 +83,7 @@ fn main() {
     hint.set_label_color(fltk::enums::Color::from_hex(0x585860));
 
     outer.fixed(&title, 28);
-    outer.fixed(&input, 32);
+    outer.fixed(&input_wrap, 32);
     outer.fixed(&divider, 1);
     outer.fixed(&hint, 20);
 
