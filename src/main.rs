@@ -6,38 +6,35 @@ use fltk::{app, prelude::*, window::Window, input::Input, frame::Frame, group::F
 fn main() {
     let app = app::App::default();
 
+    let (screen_w, screen_h) = app::screen_size();
+
     let mut win = Window::default()
         .with_size(600, 400)
+        .with_pos(
+            ((screen_w - 600.0) / 2.0) as i32,
+            ((screen_h - 400.0) / 2.0) as i32,
+        )
         .with_label("RS Launcher");
     win.make_resizable(false);
     win.set_border(false);
-    win.end();
-    win.show();
-
-    let (screen_w, screen_h) = app::screen_size();
-    win.set_pos(
-        ((screen_w - 600.0) / 2.0) as i32,
-        ((screen_h - 400.0) / 2.0) as i32,
-    );
+    win.set_color(fltk::enums::Color::from_hex(0x1e1e1e));
 
     let mut flex = Flex::default()
         .with_size(580, 360)
         .center_of(&win);
     flex.set_type(fltk::group::FlexType::Column);
+    flex.set_pad(16);
     flex.set_margin(16);
 
     let mut input = Input::default();
-    input.set_size(540, 30);
     input.set_tooltip("Type to search...");
 
     let mut hint = Frame::default();
     hint.set_label("Ctrl+Alt+Space to toggle  |  Esc to close");
     hint.set_label_size(11);
+    hint.set_label_color(fltk::enums::Color::from_hex(0x646464));
 
     flex.end();
-    flex.set_pad(16);
-
-    win.set_color(fltk::enums::Color::from_hex(0x1e1e1e));
     win.end();
     win.show();
 
