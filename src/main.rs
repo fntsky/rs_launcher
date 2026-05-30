@@ -1,7 +1,10 @@
 mod hotkey;
 mod tray;
 
-use fltk::{app, prelude::*, window::Window, input::Input, frame::Frame, group::Flex, image::RgbImage, enums::ColorDepth};
+use fltk::{
+    app, enums::ColorDepth, frame::Frame, group::Flex, image::RgbImage, input::Input, prelude::*,
+    window::Window,
+};
 
 fn main() {
     let app = app::App::default();
@@ -47,17 +50,17 @@ fn main() {
     title.set_label_color(fltk::enums::Color::from_hex(0x88a4cc));
     title.set_label_font(fltk::enums::Font::HelveticaBold);
 
-    let mut input = Input::default().with_size(0, 28);
+    let mut input = Input::default();
     input.set_frame(fltk::enums::FrameType::RFlatBox);
     input.set_color(fltk::enums::Color::from_hex(0x2a2a30));
     input.set_text_color(fltk::enums::Color::from_hex(0xe0e0e0));
-    input.set_text_size(18);
+    input.set_text_size(16);
     input.set_text_font(fltk::enums::Font::Helvetica);
     input.set_selection_color(fltk::enums::Color::from_hex(0x4a90d9));
     input.set_cursor_color(fltk::enums::Color::from_hex(0x6ea8e0));
     input.set_tooltip("Type to search...");
 
-    let mut divider = Frame::default().with_size(0, 1);
+    let mut divider = Frame::default();
     divider.set_color(fltk::enums::Color::from_hex(0x3a3a42));
 
     let mut result_area = Frame::default();
@@ -71,6 +74,11 @@ fn main() {
     hint.set_label("Ctrl+Alt+Space to toggle  |  Esc to close");
     hint.set_label_size(11);
     hint.set_label_color(fltk::enums::Color::from_hex(0x585860));
+
+    outer.fixed(&title, 28);
+    outer.fixed(&input, 32);
+    outer.fixed(&divider, 1);
+    outer.fixed(&hint, 20);
 
     outer.end();
     win.end();
