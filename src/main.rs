@@ -52,15 +52,11 @@ fn main() {
 
     let mut input_group = Flex::default_fill();
     input_group.set_type(fltk::group::FlexType::Row);
+    input_group.set_margin(4);
     input_group.set_pad(0);
 
-    let mut icon = Frame::default();
-    icon.set_label("🔍");
-    icon.set_label_size(16);
-    icon.set_label_color(fltk::enums::Color::from_hex(0x6a6a72));
-
     let mut input = Input::default();
-    input.set_frame(fltk::enums::FrameType::NoBox);
+    input.set_frame(fltk::enums::FrameType::FlatBox);
     input.set_color(fltk::enums::Color::from_hex(0x2a2a30));
     input.set_text_color(fltk::enums::Color::from_hex(0xe0e0e0));
     input.set_text_size(16);
@@ -69,7 +65,6 @@ fn main() {
     input.set_cursor_color(fltk::enums::Color::from_hex(0x6ea8e0));
     input.set_tooltip("Type to search...");
 
-    input_group.fixed(&icon, 30);
     input_group.end();
 
     let mut divider = Frame::default();
