@@ -2,7 +2,7 @@ mod hotkey;
 mod tray;
 
 use fltk::{
-    app, enums::ColorDepth, frame::Frame, group::Flex, image::RgbImage, input::Input, prelude::*,
+    app, enums::ColorDepth, frame::Frame, group::{Flex, Group}, image::RgbImage, input::Input, prelude::*,
     window::Window,
 };
 
@@ -50,11 +50,13 @@ fn main() {
     title.set_label_color(fltk::enums::Color::from_hex(0x88a4cc));
     title.set_label_font(fltk::enums::Font::HelveticaBold);
 
-    let mut input_bg = Frame::default();
-    input_bg.set_frame(fltk::enums::FrameType::RoundedBox);
-    input_bg.set_color(fltk::enums::Color::from_hex(0x2a2a30));
+    let input_group = Group::default();
+    let mut bg = Frame::default_fill();
+    bg.set_frame(fltk::enums::FrameType::RoundedBox);
+    bg.set_color(fltk::enums::Color::from_hex(0x2a2a30));
+    bg.deactivate();
 
-    let mut input = Input::default_fill();
+    let mut input = Input::default();
     input.set_frame(fltk::enums::FrameType::NoBox);
     input.set_color(fltk::enums::Color::from_hex(0x2a2a30));
     input.set_text_color(fltk::enums::Color::from_hex(0xe0e0e0));
@@ -63,6 +65,7 @@ fn main() {
     input.set_selection_color(fltk::enums::Color::from_hex(0x4a90d9));
     input.set_cursor_color(fltk::enums::Color::from_hex(0x6ea8e0));
     input.set_tooltip("Type to search...");
+    input_group.end();
 
     let mut divider = Frame::default();
     divider.set_color(fltk::enums::Color::from_hex(0x3a3a42));
@@ -80,18 +83,19 @@ fn main() {
     hint.set_label_color(fltk::enums::Color::from_hex(0x585860));
 
     outer.fixed(&title, 28);
-    outer.fixed(&input_bg, 40);
+    outer.fixed(&input_group, 40);
     outer.fixed(&divider, 1);
     outer.fixed(&hint, 20);
 
+    outer.end();
+
     input.resize(
-        input_bg.x() + 10,
-        input_bg.y() + 4,
-        input_bg.w() - 20,
-        input_bg.h() - 8,
+        input_group.x() + 10,
+        input_group.y() + 4,
+        input_group.w() - 20,
+        input_group.h() - 8,
     );
 
-    outer.end();
     win.end();
     win.show();
 
