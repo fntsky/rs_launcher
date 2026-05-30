@@ -83,7 +83,24 @@ fn main() {
 
     let mut visible = true;
 
-    while app.wait() {
+    loop {
+        if !app.wait() {
+            if !visible {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                if hotkey_manager.poll_toggle() {
+                    visible = true;
+                    input.set_value("");
+                    win.show();
+                    input.take_focus().ok();
+                }
+                if tray_manager.poll_quit() {
+                    std::process::exit(0);
+                }
+                continue;
+            }
+            break;
+        }
+
         if hotkey_manager.poll_toggle() {
             visible = !visible;
             if visible {
@@ -99,7 +116,7 @@ fn main() {
             std::process::exit(0);
         }
 
-        if app::event_key() == fltk::enums::Key::Escape {
+        if visible && app::event_key() == fltk::enums::Key::Escape {
             visible = false;
             win.hide();
         }
