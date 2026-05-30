@@ -50,8 +50,12 @@ fn main() {
     title.set_label_color(fltk::enums::Color::from_hex(0x88a4cc));
     title.set_label_font(fltk::enums::Font::HelveticaBold);
 
-    let mut input = Input::default();
-    input.set_frame(fltk::enums::FrameType::RFlatBox);
+    let mut input_bg = Frame::default();
+    input_bg.set_frame(fltk::enums::FrameType::RoundedBox);
+    input_bg.set_color(fltk::enums::Color::from_hex(0x2a2a30));
+
+    let mut input = Input::default_fill();
+    input.set_frame(fltk::enums::FrameType::NoBox);
     input.set_color(fltk::enums::Color::from_hex(0x2a2a30));
     input.set_text_color(fltk::enums::Color::from_hex(0xe0e0e0));
     input.set_text_size(16);
@@ -76,9 +80,16 @@ fn main() {
     hint.set_label_color(fltk::enums::Color::from_hex(0x585860));
 
     outer.fixed(&title, 28);
-    outer.fixed(&input, 36);
+    outer.fixed(&input_bg, 40);
     outer.fixed(&divider, 1);
     outer.fixed(&hint, 20);
+
+    input.resize(
+        input_bg.x() + 10,
+        input_bg.y() + 4,
+        input_bg.w() - 20,
+        input_bg.h() - 8,
+    );
 
     outer.end();
     win.end();
