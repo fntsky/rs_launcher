@@ -80,6 +80,17 @@ impl HotKeyManager {
     }
 
     pub fn poll_toggle(&mut self) -> bool {
+        self.pump_message_queue();
         HOTKEY_PRESSED.swap(false, Ordering::Relaxed)
+    }
+
+    fn pump_message_queue(&self) {
+        unsafe {
+            let mut msg = std::mem::zeroed();
+            while PeekMessageW(&mut msg, self.hwnd, 0, 0, PM_REMOVE) != 0 {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
     }
 }
