@@ -1,10 +1,11 @@
 mod hotkey;
+mod search_input;
 mod tray;
 
 use fltk::{
-    app, enums::ColorDepth, frame::Frame, group::Flex, image::RgbImage, input::Input, prelude::*,
-    window::Window,
+    app, enums::ColorDepth, frame::Frame, group::Flex, image::RgbImage, prelude::*, window::Window,
 };
+use search_input::SearchInput;
 
 fn main() {
     let app = app::App::default();
@@ -55,15 +56,7 @@ fn main() {
     input_group.set_margin(4);
     input_group.set_pad(0);
 
-    let mut input = Input::default();
-    input.set_frame(fltk::enums::FrameType::FlatBox);
-    input.set_color(fltk::enums::Color::from_hex(0x2a2a30));
-    input.set_text_color(fltk::enums::Color::from_hex(0xe0e0e0));
-    input.set_text_size(16);
-    input.set_text_font(fltk::enums::Font::Helvetica);
-    input.set_selection_color(fltk::enums::Color::from_hex(0x4a90d9));
-    input.set_cursor_color(fltk::enums::Color::from_hex(0x6ea8e0));
-    input.set_tooltip("Type to search...");
+    let mut input = SearchInput::new(20);
 
     input_group.end();
 
