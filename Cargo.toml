@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-fltk = "1.4"
+iced = { version = "0.14", features = ["advanced", "smol"] }
+smol = "2"
 tray-icon = "0.24"
-log = "0.4"
 windows-sys = "0.61"
+raw-window-handle = "0.6"
+log = "0.4"
+async-stream = "0.3"
