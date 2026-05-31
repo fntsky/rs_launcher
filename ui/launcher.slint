@@ -1,0 +1,124 @@
+export component LauncherWindow inherits Window {
+    title: "RS Launcher";
+    width: 640px;
+    height: 420px;
+    background: #1e1e22;
+    no-frame: true;
+
+    // Properties
+    in-out property <string> search-query: "";
+
+    forward-focus: search-input;
+
+    callback key-escape();
+    callback search-changed(string);
+    callback search-submitted();
+
+    // Colors
+    property <color> title-color: #88a4cc;
+    property <color> input-bg: #2a2a30;
+    property <color> input-text: #e0e0e0;
+    property <color> divider-color: #3a3a42;
+    property <color> result-bg: #24242a;
+    property <color> result-text: #6a6a72;
+    property <color> hint-color: #585860;
+    property <color> selection-color: #4a90d9;
+    property <color> placeholder-color: #6a6a72;
+
+    VerticalLayout {
+        padding: 16px;
+        alignment: start;
+
+        // Title
+        Text {
+            text: "RS Launcher";
+            color: title-color;
+            font-size: 20px;
+            horizontal-alignment: center;
+        }
+
+        Rectangle { height: 12px; }
+
+        // Search input
+        Rectangle {
+            height: 40px;
+            border-radius: 6px;
+            background: input-bg;
+            clip: true;
+
+            search-input := TextInput {
+                x: 16px;
+                y: 0px;
+                width: parent.width - 32px;
+                height: parent.height;
+                text <=> root.search-query;
+                color: input-text;
+                font-size: 16px;
+                vertical-alignment: center;
+                selection-background-color: selection-color;
+
+                key-pressed(event) => {
+                    if event.text == Key.Escape {
+                        root.key-escape();
+                        return accept;
+                    }
+                    reject
+                }
+
+                edited => {
+                    root.search-changed(self.text);
+                }
+
+                accepted => {
+                    root.search-submitted();
+                }
+            }
+
+            // Placeholder text overlay (only when empty AND not focused)
+            if root.search-query == "" && !search-input.has-focus : Text {
+                x: 16px;
+                y: 0px;
+                width: parent.width - 32px;
+                height: parent.height;
+                text: "Type to search...";
+                color: placeholder-color;
+                font-size: 16px;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle { height: 8px; }
+
+        // Divider
+        Rectangle {
+            height: 1px;
+            background: divider-color;
+        }
+
+        Rectangle { height: 8px; }
+
+        // Result area
+        Rectangle {
+            border-radius: 6px;
+            background: result-bg;
+
+            Text {
+                x: 16px;
+                y: 16px;
+                text: "No results";
+                color: result-text;
+                font-size: 13px;
+            }
+        }
+
+        Rectangle { height: 8px; }
+
+        // Hint
+        Text {
+            text: "Ctrl+Alt+Space to toggle  |  Esc to close";
+            color: hint-color;
+            font-size: 11px;
+            horizontal-alignment: center;
+        }
+    }
+}
