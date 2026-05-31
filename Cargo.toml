@@ -7,7 +7,12 @@ build = "build.rs"
 [dependencies]
 slint = { version = "1.16", features = ["backend-winit", "raw-window-handle-06"] }
 tray-icon = "0.24"
-windows-sys = "0.61"
+windows-sys = { version = "0.61", features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Shell",
+    "Win32_System_Com",
+    "Win32_Foundation",
+] }
 raw-window-handle = "0.6"
 
 [build-dependencies]

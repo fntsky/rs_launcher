@@ -1,5 +1,7 @@
 mod app;
 mod hotkey;
+mod plugin;
+mod plugins;
 mod tray;
 
 use app::Launcher;

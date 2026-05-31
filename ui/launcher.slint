@@ -1,3 +1,53 @@
+export struct SearchResultItem {
+    plugin-id: string,
+    title: string,
+    subtitle: string,
+    relevance: float,
+}
+
+component ResultRow inherits Rectangle {
+    height: 48px;
+    border-radius: 4px;
+
+    in property <bool> selected: false;
+    in property <string> title: "";
+    in property <string> subtitle: "";
+
+    background: selected ? #2a3a5a : transparent;
+
+    ta := TouchArea {
+        clicked => {
+            root.selected-changed();
+        }
+    }
+
+    callback selected-changed();
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        alignment: center;
+        width: parent.width;
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+
+            Text {
+                text: title;
+                color: selected ? #ffffff : #e0e0e0;
+                font-size: 14px;
+            }
+
+            Text {
+                text: subtitle;
+                color: #6a6a72;
+                font-size: 11px;
+            }
+        }
+    }
+}
+
 export component LauncherWindow inherits Window {
     title: "RS Launcher";
     width: 640px;
@@ -7,12 +57,31 @@ export component LauncherWindow inherits Window {
 
     // Properties
     in-out property <string> search-query: "";
+    in-out property <[SearchResultItem]> search-results: [];
+    in-out property <int> selected-index: -1;
+    in-out property <length> result-viewport-y: 0px;
 
     forward-focus: search-input;
 
     callback key-escape();
     callback search-changed(string);
     callback search-submitted();
+    callback result-selected(int);
+
+    function ensure-selected-visible() {
+        if root.selected-index < 0 || root.search-results.length == 0 {
+            return;
+        }
+        let row-height = 50px;
+        let selected-y = root.selected-index * row-height;
+        let viewport-h = result-area.height - 8px;
+        let current-y = -root.result-viewport-y;
+        if selected-y < current-y {
+            root.result-viewport-y = -selected-y;
+        } else if selected-y + row-height > current-y + viewport-h {
+            root.result-viewport-y = -(selected-y + row-height - viewport-h);
+        }
+    }
 
     // Colors
     property <color> title-color: #88a4cc;
@@ -62,6 +131,26 @@ export component LauncherWindow inherits Window {
                         root.key-escape();
                         return accept;
                     }
+                    // Arrow Up
+                    if event.text == "\u{F700}" {
+                        if root.selected-index > 0 {
+                            root.selected-index -= 1;
+                            root.ensure-selected-visible();
+                        }
+                        return accept;
+                    }
+                    // Arrow Down
+                    if event.text == "\u{F701}" {
+                        if root.selected-index < root.search-results.length - 1 {
+                            root.selected-index += 1;
+                            root.ensure-selected-visible();
+                        }
+                        return accept;
+                    }
+                    if event.text == Key.Return && root.selected-index >= 0 {
+                        root.result-selected(root.selected-index);
+                        return accept;
+                    }
                     reject
                 }
 
@@ -98,16 +187,38 @@ export component LauncherWindow inherits Window {
         Rectangle { height: 8px; }
 
         // Result area
-        Rectangle {
+        result-area := Rectangle {
             border-radius: 6px;
             background: result-bg;
+            clip: true;
+            min-height: 200px;
 
-            Text {
+            if root.search-results.length == 0 : Text {
                 x: 16px;
                 y: 16px;
                 text: "No results";
                 color: result-text;
                 font-size: 13px;
+            }
+
+            if root.search-results.length > 0 : Flickable {
+                viewport-y: root.result-viewport-y;
+
+                VerticalLayout {
+                    padding: 4px;
+                    spacing: 2px;
+                    width: parent.width;
+
+                    for result[idx] in root.search-results : ResultRow {
+                        title: result.title;
+                        subtitle: result.subtitle;
+                        selected: idx == root.selected-index;
+                        selected-changed => {
+                            root.selected-index = idx;
+                            root.result-selected(idx);
+                        }
+                    }
+                }
             }
         }
 
