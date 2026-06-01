@@ -4,6 +4,20 @@ mod plugins;
 mod search;
 mod icon;
 
+use tauri::LogicalPosition;
+
+fn center_window_top(window: &tauri::WebviewWindow) {
+    use tauri::Manager;
+    if let Some(monitor) = window.primary_monitor().ok().flatten().or_else(|| window.available_monitors().ok().and_then(|m| m.into_iter().next())) {
+        let screen_size = monitor.size();
+        let scale = monitor.scale_factor();
+        let win_size = window.inner_size().unwrap_or_default();
+        let x = (screen_size.width as f64 / scale - win_size.width as f64 / scale) / 2.0;
+        let y = screen_size.height as f64 / scale * 0.2;
+        let _ = window.set_position(LogicalPosition::new(x, y));
+    }
+}
+
 use std::sync::{Arc, Mutex};
 use tauri::{Manager, State};
 use serde::Serialize;
@@ -110,9 +124,9 @@ fn register_shortcut_internal(app: &tauri::AppHandle, shortcut_str: &str) -> Res
                 if is_visible {
                     let _ = window.hide();
                 } else {
+                    center_window_top(&window);
                     let _ = window.show();
                     let _ = window.set_focus();
-                    let _ = window.center();
                 }
             }
         }
@@ -177,9 +191,9 @@ pub fn run() {
                         ..
                     } = event {
                         if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            center_window_top(&window);
                             let _ = window.show();
                             let _ = window.set_focus();
-                            let _ = window.center();
                         }
                     }
                 })
@@ -193,7 +207,10 @@ pub fn run() {
                     // frameless corners and dropshadow correctly, eliminating clipping/white backgrounds.
                     let _ = window_vibrancy::apply_mica(&window, Some(true));
                 }
-                
+
+                // Position window: horizontally centered, vertically at ~20% of screen
+                center_window_top(&window);
+
                 let _ = window.show();
                 let _ = window.set_focus();
             }

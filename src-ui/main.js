@@ -1,9 +1,17 @@
 // RS Launcher — Main Frontend Logic
 // Uses window.__TAURI__ (injected by withGlobalTauri: true)
 
-const { invoke } = window.__TAURI__.core;
+const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { getCurrentWindow, LogicalSize } = window.__TAURI__.window;
 const appWindow = getCurrentWindow();
+
+// Global error handler
+window.addEventListener('error', (e) => {
+  console.error('[GLOBAL ERROR]', e.message, e.filename, e.lineno);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('[UNHANDLED REJECTION]', e.reason);
+});
 
 // ============================================================
 // State
@@ -101,7 +109,7 @@ function renderResults() {
     const selected = i === selectedIndex ? ' selected' : '';
     const delay = Math.min(i * 25, 200);
     const iconEl = r.icon_path
-      ? `<img class="result-icon" src="${convertIconPath(r.icon_path)}" onerror="this.outerHTML='<div class=\\'result-icon-placeholder\\'>📄</div>'">`
+      ? `<img class="result-icon" src="${convertIconPath(r.icon_path)}">`
       : '<div class="result-icon-placeholder">📄</div>';
 
     return `
@@ -121,10 +129,16 @@ function renderResults() {
 
 function convertIconPath(path) {
   if (!path) return '';
-  // Use Tauri asset protocol to serve local files
   try {
-    return window.__TAURI__.core.convertFileSrc(path);
-  } catch {
+    if (typeof convertFileSrc === 'function') {
+      const url = convertFileSrc(path);
+      console.log('[ICON]', path, '->', url);
+      return url;
+    }
+    console.error('[ICON] convertFileSrc is not a function');
+    return '';
+  } catch (e) {
+    console.error('[ICON] convertFileSrc error:', e, 'path:', path);
     return '';
   }
 }
@@ -140,6 +154,16 @@ function scrollToSelected() {
   const item = resultsList.querySelector(`[data-index="${selectedIndex}"]`);
   if (item) item.scrollIntoView({ block: 'nearest' });
 }
+
+// Handle icon load failures via event delegation (CSP blocks inline onerror)
+resultsList.addEventListener('error', (e) => {
+  if (e.target.tagName === 'IMG' && e.target.classList.contains('result-icon')) {
+    e.target.replaceWith(Object.assign(document.createElement('div'), {
+      className: 'result-icon-placeholder',
+      textContent: '📄',
+    }));
+  }
+}, true);
 
 // ============================================================
 // Keyboard Navigation
