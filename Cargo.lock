@@ -4321,10 +4321,13 @@ dependencies = [
 name = "rs_launcher"
 version = "0.1.0"
 dependencies = [
+ "dirs",
  "pinyin",
  "png 0.17.16",
  "raw-window-handle",
  "seahash",
+ "serde",
+ "serde_json",
  "slint",
  "slint-build",
  "tray-icon",

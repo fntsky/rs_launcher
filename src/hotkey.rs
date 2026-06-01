@@ -1,11 +1,30 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 static HOTKEY_PRESSED: AtomicBool = AtomicBool::new(false);
 
+/// Global channel for sending hotkey reconfiguration from UI thread to background thread.
+static HOTKEY_SENDER: std::sync::OnceLock<mpsc::Sender<(u32, u32)>> = std::sync::OnceLock::new();
+
+/// Initialize the global hotkey channel. Must be called before any sender usage.
+/// Called early in app startup, before the background thread or UI callbacks.
+pub fn init_channel() -> mpsc::Receiver<(u32, u32)> {
+    let (tx, rx) = mpsc::channel();
+    let _ = HOTKEY_SENDER.set(tx);
+    rx
+}
+
+/// Get the sender for the UI thread to send hotkey updates.
+pub fn new_hotkey_sender() -> mpsc::Sender<(u32, u32)> {
+    HOTKEY_SENDER.get().expect("hotkey channel not initialized").clone()
+}
+
 pub struct HotKeyManager {
     hwnd: windows_sys::Win32::Foundation::HWND,
+    mods: u32,
+    vk: u32,
 }
 
 impl Drop for HotKeyManager {
@@ -32,7 +51,7 @@ unsafe extern "system" fn hotkey_wnd_proc(
 }
 
 impl HotKeyManager {
-    pub fn new() -> Result<Self, String> {
+    pub fn new(mods: u32, vk: u32) -> Result<Self, String> {
         unsafe {
             let class_name: Vec<u16> = "RS Launcher Hotkey\0".encode_utf16().collect();
             let hinstance = windows_sys::Win32::System::LibraryLoader::GetModuleHandleW(std::ptr::null());
@@ -62,9 +81,6 @@ impl HotKeyManager {
                 return Err("Failed to create message-only window".into());
             }
 
-            // MOD_ALT=1, MOD_CONTROL=2, MOD_NOREPEAT=0x4000
-            let mods = MOD_ALT | MOD_CONTROL | MOD_NOREPEAT;
-            let vk = VK_SPACE as u32;
             let result = RegisterHotKey(hwnd, 1, mods, vk);
 
             if result == 0 {
@@ -73,10 +89,34 @@ impl HotKeyManager {
                 return Err(format!("RegisterHotKey failed: {}", err));
             }
 
-            eprintln!("[HOTKEY] Ctrl+Alt+Space registered on HWND_MESSAGE window");
+            eprintln!("[HOTKEY] Hotkey registered on HWND_MESSAGE window");
 
-            Ok(Self { hwnd })
+            Ok(Self { hwnd, mods, vk })
         }
+    }
+
+    /// Re-register with a new hotkey. Returns Ok(()) on success.
+    pub fn reregister(&mut self, mods: u32, vk: u32) -> Result<(), String> {
+        if self.mods == mods && self.vk == vk {
+            return Ok(());
+        }
+        unsafe {
+            UnregisterHotKey(self.hwnd, 1);
+            let result = RegisterHotKey(self.hwnd, 1, mods, vk);
+            if result == 0 {
+                let err = std::io::Error::last_os_error();
+                // Try to restore the old hotkey
+                let restore = RegisterHotKey(self.hwnd, 1, self.mods, self.vk);
+                if restore == 0 {
+                    eprintln!("[HOTKEY] Failed to restore old hotkey after reregister failure");
+                }
+                return Err(format!("RegisterHotKey failed: {}", err));
+            }
+        }
+        self.mods = mods;
+        self.vk = vk;
+        eprintln!("[HOTKEY] Hotkey reregistered successfully");
+        Ok(())
     }
 
     pub fn poll_toggle(&mut self) -> bool {
