@@ -1,0 +1,221 @@
+mod config;
+mod plugin;
+mod plugins;
+mod search;
+mod icon;
+
+use std::sync::{Arc, Mutex};
+use tauri::{Manager, State};
+use serde::Serialize;
+
+use plugin::{PluginEngine, SearchResult};
+
+pub struct AppState {
+    engine: Arc<PluginEngine>,
+    config: Mutex<config::AppConfig>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct SearchResultDTO {
+    pub plugin_id: String,
+    pub title: String,
+    pub subtitle: String,
+    pub relevance: f64,
+    pub icon_path: String,
+}
+
+impl From<SearchResult> for SearchResultDTO {
+    fn from(r: SearchResult) -> Self {
+        Self {
+            plugin_id: r.plugin_id,
+            title: r.title,
+            subtitle: r.subtitle,
+            relevance: r.relevance,
+            icon_path: r.icon_path,
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct ConfigDTO {
+    pub hotkey_display: String,
+}
+
+#[tauri::command]
+fn search(query: String, state: State<'_, AppState>) -> Vec<SearchResultDTO> {
+    if query.is_empty() {
+        return Vec::new();
+    }
+    state.engine.query(&query).into_iter().map(|r| r.into()).collect()
+}
+
+#[tauri::command]
+fn execute_result(subtitle: String) {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    let wide_path: Vec<u16> = OsStr::new(&subtitle)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let wide_open: Vec<u16> = OsStr::new("open")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    unsafe {
+        windows_sys::Win32::UI::Shell::ShellExecuteW(
+            std::ptr::null_mut(),
+            wide_open.as_ptr(),
+            wide_path.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOW,
+        );
+    }
+}
+
+#[tauri::command]
+fn get_config(state: State<'_, AppState>) -> ConfigDTO {
+    let cfg = state.config.lock().unwrap();
+    ConfigDTO {
+        hotkey_display: cfg.hotkey_display(),
+    }
+}
+
+#[tauri::command]
+fn save_hotkey(shortcut_str: String, app_handle: tauri::AppHandle) -> Result<(), String> {
+    // Parse shortcut string like "Ctrl+Alt+Space" and re-register
+    // For now, store the display string and re-register with Tauri's global shortcut API
+    let app_handle_clone = app_handle.clone();
+    register_shortcut_internal(&app_handle_clone, &shortcut_str)
+        .map_err(|e| format!("Failed to register shortcut: {}", e))?;
+    Ok(())
+}
+
+fn register_shortcut_internal(app: &tauri::AppHandle, shortcut_str: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+    // Unregister all existing shortcuts
+    let _ = app.global_shortcut().unregister_all();
+
+    // Parse shortcut string
+    let shortcut: tauri_plugin_global_shortcut::Shortcut = shortcut_str.parse()?;
+
+    let app_handle = app.clone();
+    app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
+        if event.state == ShortcutState::Pressed {
+            if let Some(window) = app_handle.get_webview_window("main") {
+                let is_visible = window.is_visible().unwrap_or(false);
+                if is_visible {
+                    let _ = window.hide();
+                } else {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    let _ = window.center();
+                }
+            }
+        }
+    })?;
+
+    app.global_shortcut().register(shortcut)?;
+    Ok(())
+}
+
+pub fn run() {
+    let registry = Arc::new(plugins::create_registry());
+    let engine = Arc::new(PluginEngine::new(registry));
+    let config = config::AppConfig::load();
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .manage(AppState {
+            engine,
+            config: Mutex::new(config),
+        })
+        .invoke_handler(tauri::generate_handler![
+            search,
+            execute_result,
+            get_config,
+            save_hotkey,
+        ])
+        .setup(|app| {
+            // Register global shortcut
+            let shortcut_str = {
+                let state = app.state::<AppState>();
+                let cfg = state.config.lock().unwrap();
+                cfg.hotkey_display()
+            };
+
+            // Try to register the configured shortcut, fallback to Ctrl+Alt+Space
+            let app_handle = app.handle().clone();
+            if let Err(e) = register_shortcut_internal(&app_handle, &shortcut_str) {
+                eprintln!("[LAUNCHER] Failed to register shortcut '{}': {}, trying fallback", shortcut_str, e);
+                let _ = register_shortcut_internal(&app_handle, "Ctrl+Alt+Space");
+            }
+
+            // Setup system tray
+            use tauri::tray::{TrayIconBuilder, MouseButton, MouseButtonState};
+            use tauri::menu::{MenuBuilder, MenuItemBuilder};
+
+            let quit_item = MenuItemBuilder::with_id("quit", "退出").build(app)?;
+            let menu = MenuBuilder::new(app).item(&quit_item).build()?;
+
+            let app_handle_tray = app.handle().clone();
+            TrayIconBuilder::new()
+                .menu(&menu)
+                .tooltip("RS Launcher")
+                .on_menu_event(move |_tray, event| {
+                    if event.id() == "quit" {
+                        app_handle_tray.exit(0);
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            let _ = window.center();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            // Show main window after setup
+            if let Some(window) = app.get_webview_window("main") {
+                // Apply native DWM rounded corners (Windows 11+)
+                // CSS border-radius doesn't work with WebView2 transparency
+                #[cfg(windows)]
+                {
+                    use raw_window_handle::HasWindowHandle;
+                    if let Ok(handle) = window.window_handle() {
+                        if let raw_window_handle::RawWindowHandle::Win32(win32) = handle.as_raw() {
+                            let hwnd = win32.hwnd.get() as windows_sys::Win32::Foundation::HWND;
+                            unsafe {
+                                const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
+                                const DWMWCP_ROUND: u32 = 2;
+                                let preference = DWMWCP_ROUND;
+                                windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute(
+                                    hwnd,
+                                    DWMWA_WINDOW_CORNER_PREFERENCE,
+                                    &preference as *const _ as *const _,
+                                    std::mem::size_of::<u32>() as u32,
+                                );
+                            }
+                        }
+                    }
+                }
+
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
