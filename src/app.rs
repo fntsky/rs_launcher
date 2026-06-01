@@ -284,27 +284,32 @@ fn hide_from_taskbar(window: &slint::Window) {
 fn center_window(window: &slint::Window) {
     if let Some(hwnd) = get_hwnd(window) {
         if let Some(screen) = get_screen_rect(hwnd) {
-            let screen_width = screen.right - screen.left;
-            let screen_height = screen.bottom - screen.top;
-            let x = screen.left + (screen_width - 640) / 2;
-            let y = screen.top + (screen_height / 4) - 40;
-            eprintln!("[DEBUG] screen: ({}, {}) - ({}, {}), size: {}x{}", screen.left, screen.top, screen.right, screen.bottom, screen_width, screen_height);
-            eprintln!("[DEBUG] setting window pos: x={}, y={}, w=640, h=80", x, y);
+            // Use Slint's logical size API to resize, then re-position with physical coordinates.
+            // This avoids the DPI conflict where Slint "corrects" our raw SetWindowPos size.
+            window.set_size(slint::LogicalSize::new(640.0, 80.0));
+
+            // Read back the actual physical size after Slint processes the resize
             unsafe {
+                let mut rect: windows_sys::Win32::Foundation::RECT = std::mem::zeroed();
+                windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect(hwnd, &mut rect);
+                let physical_width = rect.right - rect.left;
+
+                let screen_width = screen.right - screen.left;
+                let screen_height = screen.bottom - screen.top;
+                let x = screen.left + (screen_width - physical_width) / 2;
+                let y = screen.top + screen_height / 4 - 40;
+
                 windows_sys::Win32::UI::WindowsAndMessaging::SetWindowPos(
                     hwnd,
                     std::ptr::null_mut(),
                     x,
                     y,
-                    640,
-                    80,
-                    windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
+                    0,
+                    0,
+                    windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOSIZE
+                        | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
                         | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
                 );
-                // Read back actual window rect
-                let mut rect: windows_sys::Win32::Foundation::RECT = std::mem::zeroed();
-                windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect(hwnd, &mut rect);
-                eprintln!("[DEBUG] actual window rect: ({}, {}) - ({}, {}), size: {}x{}", rect.left, rect.top, rect.right, rect.bottom, rect.right - rect.left, rect.bottom - rect.top);
             }
         }
     }
@@ -332,30 +337,42 @@ fn get_screen_rect(hwnd: windows_sys::Win32::Foundation::HWND) -> Option<windows
     }
 }
 
-/// Resize window height while keeping the top position fixed
+/// Resize window height using Slint's logical size API to avoid DPI conflicts.
+/// Slint internally handles logical-to-physical conversion, preventing winit from
+/// "correcting" our raw Win32 SetWindowPos calls.
 fn resize_window(window: &slint::Window, has_input: bool) {
+    let target_height = if has_input { 420.0 } else { 80.0 };
+    window.set_size(slint::LogicalSize::new(640.0, target_height));
+
+    // After Slint resizes, re-center the window position using the actual physical size.
+    // Slint's set_size processes through winit, which may apply DPI scaling differently
+    // depending on timing, so we read back the physical size and center accordingly.
     if let Some(hwnd) = get_hwnd(window) {
         unsafe {
-            let target_height = if has_input { 420 } else { 80 };
-
             if let Some(screen) = get_screen_rect(hwnd) {
+                let mut rect: windows_sys::Win32::Foundation::RECT = std::mem::zeroed();
+                windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect(hwnd, &mut rect);
+                let physical_width = rect.right - rect.left;
                 let screen_width = screen.right - screen.left;
+                let x = screen.left + (screen_width - physical_width) / 2;
                 let y = screen.top + (screen.bottom - screen.top) / 4 - 40;
 
                 windows_sys::Win32::UI::WindowsAndMessaging::SetWindowPos(
                     hwnd,
                     std::ptr::null_mut(),
-                    screen.left + (screen_width - 640) / 2,
+                    x,
                     y,
-                    640,
-                    target_height,
-                    windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
+                    0,
+                    0,
+                    windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOSIZE
+                        | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
                         | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
                 );
             }
         }
     }
 }
+
 fn set_rounded_corners(window: &slint::Window) {
     if let Some(hwnd) = get_hwnd(window) {
         unsafe {
