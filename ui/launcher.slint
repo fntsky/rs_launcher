@@ -26,7 +26,7 @@ component ResultRow inherits Rectangle {
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 12px;
-        alignment: center;
+        alignment: start;
         width: parent.width;
 
         VerticalLayout {
@@ -51,8 +51,7 @@ component ResultRow inherits Rectangle {
 export component LauncherWindow inherits Window {
     title: "RS Launcher";
     width: 640px;
-    height: 420px;
-    background: #1e1e22;
+    background: transparent;
     no-frame: true;
 
     // Properties
@@ -60,6 +59,7 @@ export component LauncherWindow inherits Window {
     in-out property <[SearchResultItem]> search-results: [];
     in-out property <int> selected-index: -1;
     in-out property <length> result-viewport-y: 0px;
+    in-out property <bool> has-input: false;
 
     forward-focus: search-input;
 
@@ -69,12 +69,12 @@ export component LauncherWindow inherits Window {
     callback result-selected(int);
 
     function ensure-selected-visible() {
-        if root.selected-index < 0 || root.search-results.length == 0 {
+        if root.selected-index < 0 || root.search-results.length == 0 || !root.has-input {
             return;
         }
         let row-height = 50px;
         let selected-y = root.selected-index * row-height;
-        let viewport-h = result-area.height - 8px;
+        let viewport-h = 192px;
         let current-y = -root.result-viewport-y;
         if selected-y < current-y {
             root.result-viewport-y = -selected-y;
@@ -84,7 +84,6 @@ export component LauncherWindow inherits Window {
     }
 
     // Colors
-    property <color> title-color: #88a4cc;
     property <color> input-bg: #2a2a30;
     property <color> input-text: #e0e0e0;
     property <color> divider-color: #3a3a42;
@@ -94,142 +93,138 @@ export component LauncherWindow inherits Window {
     property <color> selection-color: #4a90d9;
     property <color> placeholder-color: #6a6a72;
 
-    VerticalLayout {
-        padding: 16px;
-        alignment: start;
+    Rectangle {
+        border-radius: 12px;
+        background: #1e1e22;
+        clip: true;
 
-        // Title
-        Text {
-            text: "RS Launcher";
-            color: title-color;
-            font-size: 20px;
-            horizontal-alignment: center;
-        }
+        VerticalLayout {
+            padding: 16px;
+            alignment: start;
 
-        Rectangle { height: 12px; }
+            // Search input
+            Rectangle {
+                height: 40px;
+                border-radius: 6px;
+                background: input-bg;
+                clip: true;
 
-        // Search input
-        Rectangle {
-            height: 40px;
-            border-radius: 6px;
-            background: input-bg;
-            clip: true;
+                search-input := TextInput {
+                    x: 16px;
+                    y: 0px;
+                    width: parent.width - 32px;
+                    height: parent.height;
+                    text <=> root.search-query;
+                    color: input-text;
+                    font-size: 16px;
+                    vertical-alignment: center;
+                    selection-background-color: selection-color;
 
-            search-input := TextInput {
-                x: 16px;
-                y: 0px;
-                width: parent.width - 32px;
-                height: parent.height;
-                text <=> root.search-query;
-                color: input-text;
-                font-size: 16px;
-                vertical-alignment: center;
-                selection-background-color: selection-color;
-
-                key-pressed(event) => {
-                    if event.text == Key.Escape {
-                        root.key-escape();
-                        return accept;
-                    }
-                    // Arrow Up
-                    if event.text == "\u{F700}" {
-                        if root.selected-index > 0 {
-                            root.selected-index -= 1;
-                            root.ensure-selected-visible();
+                    key-pressed(event) => {
+                        if event.text == Key.Escape {
+                            root.key-escape();
+                            return accept;
                         }
-                        return accept;
-                    }
-                    // Arrow Down
-                    if event.text == "\u{F701}" {
-                        if root.selected-index < root.search-results.length - 1 {
-                            root.selected-index += 1;
-                            root.ensure-selected-visible();
+                        // Arrow Up
+                        if event.text == "\u{F700}" {
+                            if root.selected-index > 0 {
+                                root.selected-index -= 1;
+                                root.ensure-selected-visible();
+                            }
+                            return accept;
                         }
-                        return accept;
+                        // Arrow Down
+                        if event.text == "\u{F701}" {
+                            if root.selected-index < root.search-results.length - 1 {
+                                root.selected-index += 1;
+                                root.ensure-selected-visible();
+                            }
+                            return accept;
+                        }
+                        if event.text == Key.Return && root.selected-index >= 0 {
+                            root.result-selected(root.selected-index);
+                            return accept;
+                        }
+                        reject
                     }
-                    if event.text == Key.Return && root.selected-index >= 0 {
-                        root.result-selected(root.selected-index);
-                        return accept;
+
+                    edited => {
+                        root.search-changed(self.text);
                     }
-                    reject
+
+                    accepted => {
+                        root.search-submitted();
+                    }
                 }
 
-                edited => {
-                    root.search-changed(self.text);
-                }
-
-                accepted => {
-                    root.search-submitted();
+                // Placeholder text overlay (only when empty AND not focused)
+                if root.search-query == "" && !search-input.has-focus : Text {
+                    x: 16px;
+                    y: 0px;
+                    width: parent.width - 32px;
+                    height: parent.height;
+                    text: "Type to search...";
+                    color: placeholder-color;
+                    font-size: 16px;
+                    vertical-alignment: center;
                 }
             }
 
-            // Placeholder text overlay (only when empty AND not focused)
-            if root.search-query == "" && !search-input.has-focus : Text {
-                x: 16px;
-                y: 0px;
-                width: parent.width - 32px;
-                height: parent.height;
-                text: "Type to search...";
-                color: placeholder-color;
-                font-size: 16px;
-                vertical-alignment: center;
-            }
-        }
+            Rectangle { height: 8px; }
 
-        Rectangle { height: 8px; }
-
-        // Divider
-        Rectangle {
-            height: 1px;
-            background: divider-color;
-        }
-
-        Rectangle { height: 8px; }
-
-        // Result area
-        result-area := Rectangle {
-            border-radius: 6px;
-            background: result-bg;
-            clip: true;
-            min-height: 200px;
-
-            if root.search-results.length == 0 : Text {
-                x: 16px;
-                y: 16px;
-                text: "No results";
-                color: result-text;
-                font-size: 13px;
+            // Divider
+            if root.has-input : Rectangle {
+                height: 1px;
+                background: divider-color;
             }
 
-            if root.search-results.length > 0 : Flickable {
-                viewport-y: root.result-viewport-y;
+            if root.has-input : Rectangle { height: 8px; }
 
-                VerticalLayout {
-                    padding: 4px;
-                    spacing: 2px;
-                    width: parent.width;
+            // Result area
+            if root.has-input : result-area := Rectangle {
+                border-radius: 6px;
+                background: result-bg;
+                clip: true;
+                min-height: 200px;
 
-                    for result[idx] in root.search-results : ResultRow {
-                        title: result.title;
-                        subtitle: result.subtitle;
-                        selected: idx == root.selected-index;
-                        selected-changed => {
-                            root.selected-index = idx;
-                            root.result-selected(idx);
+                if root.search-results.length == 0 : Text {
+                    x: 16px;
+                    y: 16px;
+                    text: "No results";
+                    color: result-text;
+                    font-size: 13px;
+                }
+
+                if root.search-results.length > 0 : Flickable {
+                    viewport-y: root.result-viewport-y;
+
+                    VerticalLayout {
+                        padding: 4px;
+                        spacing: 2px;
+                        width: parent.width;
+
+                        for result[idx] in root.search-results : ResultRow {
+                            title: result.title;
+                            subtitle: result.subtitle;
+                            selected: idx == root.selected-index;
+                            selected-changed => {
+                                root.selected-index = idx;
+                                root.result-selected(idx);
+                            }
                         }
                     }
                 }
             }
-        }
 
-        Rectangle { height: 8px; }
+            if root.has-input : Rectangle { height: 8px; }
 
-        // Hint
-        Text {
-            text: "Ctrl+Alt+Space to toggle  |  Esc to close";
-            color: hint-color;
-            font-size: 11px;
-            horizontal-alignment: center;
+            // Hint
+            if !root.has-input : Text {
+                text: "Ctrl+Alt+Space to toggle  |  Esc to close";
+                color: hint-color;
+                font-size: 11px;
+                horizontal-alignment: center;
+            }
         }
     }
 }

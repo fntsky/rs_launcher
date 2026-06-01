@@ -1,4 +1,5 @@
 use crate::plugin::{Plugin, SearchResult};
+use crate::search::fuzzy::fuzzy_match;
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
@@ -216,16 +217,10 @@ impl Plugin for AppSearchPlugin {
             .apps
             .iter()
             .filter_map(|app| {
-                let name_lower = app.name.to_lowercase();
-                let relevance = if name_lower == input_lower {
-                    1.0
-                } else if name_lower.starts_with(&input_lower) {
-                    0.85
-                } else if name_lower.contains(&input_lower) {
-                    0.6
-                } else {
+                let relevance = fuzzy_match(&input_lower, &app.name);
+                if relevance <= 0.0 {
                     return None;
-                };
+                }
 
                 eprintln!("[APP_SEARCH] 匹配: {} (相关度: {:.2})", app.name, relevance);
                 Some(SearchResult {
@@ -293,15 +288,17 @@ mod tests {
         assert_eq!(results[0].title, "Chrome");
         assert!((results[0].relevance - 1.0).abs() < 0.01);
 
-        // Prefix match
+        // Prefix match (fuzzy_match returns 0.85 + ratio)
         let results = plugin.query("chr");
         assert_eq!(results.len(), 2);
-        assert!((results[0].relevance - 0.85).abs() < 0.01);
+        assert!(results[0].relevance >= 0.85);
+        assert!(results[0].relevance < 1.0);
 
-        // Contains match
+        // Contains match (fuzzy_match returns 0.6 + ratio)
         let results = plugin.query("studio");
         assert_eq!(results.len(), 1);
-        assert!((results[0].relevance - 0.6).abs() < 0.01);
+        assert!(results[0].relevance >= 0.6);
+        assert!(results[0].relevance < 0.85);
 
         // No match
         let results = plugin.query("firefox");
