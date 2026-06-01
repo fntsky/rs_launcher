@@ -2507,6 +2507,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-global-shortcut",
+ "window-vibrancy",
  "windows-sys 0.61.2",
 ]
 

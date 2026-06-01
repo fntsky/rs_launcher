@@ -187,29 +187,13 @@ pub fn run() {
 
             // Show main window after setup
             if let Some(window) = app.get_webview_window("main") {
-                // Apply native DWM rounded corners (Windows 11+)
-                // CSS border-radius doesn't work with WebView2 transparency
-                #[cfg(windows)]
+                #[cfg(target_os = "windows")]
                 {
-                    use raw_window_handle::HasWindowHandle;
-                    if let Ok(handle) = window.window_handle() {
-                        if let raw_window_handle::RawWindowHandle::Win32(win32) = handle.as_raw() {
-                            let hwnd = win32.hwnd.get() as windows_sys::Win32::Foundation::HWND;
-                            unsafe {
-                                const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
-                                const DWMWCP_ROUND: u32 = 2;
-                                let preference = DWMWCP_ROUND;
-                                windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute(
-                                    hwnd,
-                                    DWMWA_WINDOW_CORNER_PREFERENCE,
-                                    &preference as *const _ as *const _,
-                                    std::mem::size_of::<u32>() as u32,
-                                );
-                            }
-                        }
-                    }
+                    // Apply Mica effect. This automatically forces DWM to handle the window's
+                    // frameless corners and dropshadow correctly, eliminating clipping/white backgrounds.
+                    let _ = window_vibrancy::apply_mica(&window, Some(true));
                 }
-
+                
                 let _ = window.show();
                 let _ = window.set_focus();
             }
