@@ -66,18 +66,31 @@ impl Launcher {
             let engine = engine_query.clone();
             std::thread::spawn(move || {
                 let results = engine.query(&input);
-                let items: Vec<SearchResultItem> = results
-                    .iter()
-                    .map(|r| SearchResultItem {
-                        plugin_id: r.plugin_id.clone().into(),
-                        title: r.title.clone().into(),
-                        subtitle: r.subtitle.clone().into(),
-                        relevance: r.relevance as f32,
-                    })
-                    .collect();
-                let is_empty = items.is_empty();
+                // Only pass icon_path strings to the UI thread (slint::Image is not Send)
+                let icon_paths: Vec<String> = results.iter().map(|r| r.icon_path.clone()).collect();
+                let is_empty = results.is_empty();
                 let _ = slint::invoke_from_event_loop(move || {
                     if let Some(comp) = weak.upgrade() {
+                        let items: Vec<SearchResultItem> = results
+                            .iter()
+                            .enumerate()
+                            .map(|(i, r)| {
+                                let icon = if !icon_paths[i].is_empty() {
+                                    slint::Image::load_from_path(std::path::Path::new(&icon_paths[i]))
+                                        .unwrap_or_default()
+                                } else {
+                                    slint::Image::default()
+                                };
+                                SearchResultItem {
+                                    plugin_id: r.plugin_id.clone().into(),
+                                    title: r.title.clone().into(),
+                                    subtitle: r.subtitle.clone().into(),
+                                    relevance: r.relevance as f32,
+                                    icon,
+                                    has_icon: !icon_paths[i].is_empty(),
+                                }
+                            })
+                            .collect();
                         comp.set_search_results(std::rc::Rc::new(slint::VecModel::from(items)).into());
                         comp.set_selected_index(if is_empty { -1 } else { 0 });
                         comp.set_result_viewport_y(0f32);
@@ -109,6 +122,7 @@ impl Launcher {
                         title: item.title.to_string(),
                         subtitle: item.subtitle.to_string(),
                         relevance: item.relevance as f64,
+                        icon_path: String::new(),
                     };
                     engine_exec.execute(&result);
 

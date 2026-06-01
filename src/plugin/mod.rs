@@ -15,6 +15,8 @@ pub struct SearchResult {
     pub subtitle: String,
     /// 相关度分数 0.0~1.0
     pub relevance: f64,
+    /// 图标文件路径 (PNG)
+    pub icon_path: String,
 }
 
 /// 插件 trait

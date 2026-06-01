@@ -3,6 +3,8 @@ export struct SearchResultItem {
     title: string,
     subtitle: string,
     relevance: float,
+    icon: image,
+    has-icon: bool,
 }
 
 component ResultRow inherits Rectangle {
@@ -12,6 +14,8 @@ component ResultRow inherits Rectangle {
     in property <bool> selected: false;
     in property <string> title: "";
     in property <string> subtitle: "";
+    in property <image> icon;
+    in property <bool> has-icon: false;
 
     background: selected ? #2a3a5a : transparent;
 
@@ -26,8 +30,19 @@ component ResultRow inherits Rectangle {
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 12px;
+        spacing: 10px;
         alignment: start;
         width: parent.width;
+
+        if has-icon : Image {
+            width: 32px;
+            height: 32px;
+            source: icon;
+            vertical-stretch: 0;
+            horizontal-stretch: 0;
+            y: (parent.height - self.height) / 2;
+            image-fit: contain;
+        }
 
         VerticalLayout {
             alignment: center;
@@ -206,6 +221,8 @@ export component LauncherWindow inherits Window {
                         for result[idx] in root.search-results : ResultRow {
                             title: result.title;
                             subtitle: result.subtitle;
+                            icon: result.icon;
+                            has-icon: result.has-icon;
                             selected: idx == root.selected-index;
                             selected-changed => {
                                 root.selected-index = idx;

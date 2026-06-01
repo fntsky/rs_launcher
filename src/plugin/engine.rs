@@ -93,12 +93,14 @@ mod tests {
                     title: format!("{}-{}", self.id, input),
                     subtitle: String::new(),
                     relevance: 0.5,
+                    icon_path: String::new(),
                 },
                 SearchResult {
                     plugin_id: self.id.clone(),
                     title: format!("{}-{}-low", self.id, input),
                     subtitle: String::new(),
                     relevance: 0.1,
+                    icon_path: String::new(),
                 },
             ]
         }
@@ -145,6 +147,7 @@ mod tests {
             title: "test".to_string(),
             subtitle: String::new(),
             relevance: 0.5,
+            icon_path: String::new(),
         };
         engine.execute(&result);
     }

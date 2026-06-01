@@ -1,5 +1,6 @@
 use crate::plugin::{Plugin, SearchResult};
 use crate::search::fuzzy::fuzzy_match;
+use crate::icon;
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
@@ -14,6 +15,7 @@ struct AppEntry {
     name: String,
     target_path: String,
     lnk_path: String,
+    icon_path: String,
 }
 
 impl AppSearchPlugin {
@@ -57,10 +59,12 @@ fn scan_lnks(dir: &Path, apps: &mut Vec<AppEntry>) {
                 if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
                     let target = resolve_lnk_target(&path);
                     eprintln!("[APP_SEARCH]   发现: {} -> {}", name, if target.is_empty() { "(未知目标)" } else { &target });
+                    let icon_path = icon::extract_icon_to_png(&target);
                     apps.push(AppEntry {
                         name: name.to_string(),
                         target_path: target,
                         lnk_path: path.to_string_lossy().to_string(),
+                        icon_path,
                     });
                 }
             }
@@ -232,6 +236,7 @@ impl Plugin for AppSearchPlugin {
                         app.target_path.clone()
                     },
                     relevance,
+                    icon_path: app.icon_path.clone(),
                 })
             })
             .collect();
@@ -277,9 +282,9 @@ mod tests {
     #[test]
     fn relevance_scoring() {
         let plugin = AppSearchPlugin { apps: vec![
-            AppEntry { name: "Chrome".to_string(), target_path: "C:\\chrome.exe".to_string(), lnk_path: String::new() },
-            AppEntry { name: "Chrome Canary".to_string(), target_path: "C:\\canary.exe".to_string(), lnk_path: String::new() },
-            AppEntry { name: "Visual Studio Code".to_string(), target_path: "C:\\code.exe".to_string(), lnk_path: String::new() },
+            AppEntry { name: "Chrome".to_string(), target_path: "C:\\chrome.exe".to_string(), lnk_path: String::new(), icon_path: String::new() },
+            AppEntry { name: "Chrome Canary".to_string(), target_path: "C:\\canary.exe".to_string(), lnk_path: String::new(), icon_path: String::new() },
+            AppEntry { name: "Visual Studio Code".to_string(), target_path: "C:\\code.exe".to_string(), lnk_path: String::new(), icon_path: String::new() },
         ]};
 
         // Exact match

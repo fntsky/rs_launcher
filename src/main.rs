@@ -1,5 +1,6 @@
 mod app;
 mod hotkey;
+mod icon;
 mod plugin;
 mod plugins;
 mod search;
