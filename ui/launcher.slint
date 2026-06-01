@@ -66,6 +66,7 @@ component ResultRow inherits Rectangle {
 export component LauncherWindow inherits Window {
     title: "RS Launcher";
     width: 640px;
+    height: root.has-input ? 420px : 80px;
     background: transparent;
     no-frame: true;
 

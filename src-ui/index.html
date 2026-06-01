@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RS Launcher</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Search Bar -->
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <input
+        id="search-input"
+        type="text"
+        placeholder="Type to search..."
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button id="settings-btn" class="icon-btn" title="Settings">⚙</button>
+    </div>
+
+    <!-- Results Area (hidden when empty) -->
+    <div id="results-area" class="results-area hidden">
+      <div class="divider"></div>
+      <div id="results-list" class="results-list"></div>
+    </div>
+
+    <!-- Hint Bar (visible when no input) -->
+    <div id="hint-bar" class="hint-bar">
+      <span id="hotkey-hint">Ctrl+Alt+Space</span> to toggle &nbsp;|&nbsp; Esc to close
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button id="modal-close" class="icon-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-group">
+          <label>Hotkey</label>
+          <div id="hotkey-recorder" class="hotkey-recorder">
+            <span id="hotkey-display">Ctrl+Alt+Space</span>
+          </div>
+          <p class="setting-hint">Click to change. Press modifier + key combo.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

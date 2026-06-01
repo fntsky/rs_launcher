@@ -1,0 +1,44 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "default permissions",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister",
+    "global-shortcut:allow-is-registered",
+    {
+      "identifier": "core:window:allow-show",
+      "windows": ["main"]
+    },
+    {
+      "identifier": "core:window:allow-hide",
+      "windows": ["main"]
+    },
+    {
+      "identifier": "core:window:allow-set-focus",
+      "windows": ["main"]
+    },
+    {
+      "identifier": "core:window:allow-is-visible",
+      "windows": ["main"]
+    },
+    {
+      "identifier": "core:window:allow-center",
+      "windows": ["main"]
+    },
+    {
+      "identifier": "core:window:allow-set-size",
+      "windows": ["main"]
+    },
+    {
+      "identifier": "core:window:allow-close",
+      "windows": ["main"]
+    },
+    {
+      "identifier": "core:window:allow-set-always-on-top",
+      "windows": ["main"]
+    }
+  ]
+}

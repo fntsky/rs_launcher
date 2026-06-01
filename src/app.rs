@@ -32,20 +32,26 @@ impl Launcher {
             component.set_hotkey_display(cfg.hotkey_display().into());
         }
 
+        // Track previous has_input state to avoid unnecessary resizes
+        let prev_has_input = Arc::new(Mutex::new(false));
+
         // Escape pressed callback
         let weak = component.as_weak();
         let vis = visible.clone();
+        let prev_has_input_esc = prev_has_input.clone();
         let _settings_open_esc = settings_open.clone();
         component.on_key_escape(move || {
             if let Some(comp) = weak.upgrade() {
                 *vis.lock().unwrap() = false;
                 comp.set_search_query("".into());
+                comp.set_search_results(std::rc::Rc::new(slint::VecModel::default()).into());
+                comp.set_selected_index(-1);
+                comp.set_has_input(false);
+                *prev_has_input_esc.lock().unwrap() = false;
+                resize_window(&comp.window(), false);
                 win_hide(&comp.window());
             }
         });
-
-        // Track previous has_input state to avoid unnecessary resizes
-        let prev_has_input = Arc::new(Mutex::new(false));
 
         // Search changed callback — query plugins and update results
         let weak = component.as_weak();
@@ -123,6 +129,7 @@ impl Launcher {
         let weak = component.as_weak();
         let engine_exec = engine.clone();
         let vis = visible.clone();
+        let prev_has_input_exec = prev_has_input.clone();
         component.on_result_selected(move |index| {
             let weak = weak.clone();
             let vis = vis.clone();
@@ -142,6 +149,9 @@ impl Launcher {
                     comp.set_search_query("".into());
                     comp.set_search_results(std::rc::Rc::new(slint::VecModel::default()).into());
                     comp.set_selected_index(-1);
+                    comp.set_has_input(false);
+                    *prev_has_input_exec.lock().unwrap() = false;
+                    resize_window(&comp.window(), false);
                     win_hide(&comp.window());
                 }
             }
@@ -150,10 +160,16 @@ impl Launcher {
         // Window close requested - hide instead of close
         let weak = component.as_weak();
         let vis = visible.clone();
+        let prev_has_input_close = prev_has_input.clone();
         component.window().on_close_requested(move || {
             if let Some(comp) = weak.upgrade() {
                 *vis.lock().unwrap() = false;
                 comp.set_search_query("".into());
+                comp.set_search_results(std::rc::Rc::new(slint::VecModel::default()).into());
+                comp.set_selected_index(-1);
+                comp.set_has_input(false);
+                *prev_has_input_close.lock().unwrap() = false;
+                resize_window(&comp.window(), false);
                 win_hide(&comp.window());
             }
             slint::CloseRequestResponse::KeepWindowShown
@@ -245,22 +261,24 @@ impl Launcher {
             }
         });
 
-        // Show window
+        // Show the window to create the HWND, then immediately hide it
+        // synchronously (before the event loop starts) so the user never
+        // sees the default-positioned frame.
         component.show()?;
+        win_hide(&component.window());
 
-        // Defer centering, taskbar hiding, and rounded corner setup
-        let weak_init = component.as_weak();
-        slint::Timer::single_shot(std::time::Duration::from_millis(50), move || {
-            if let Some(comp) = weak_init.upgrade() {
-                center_window(&comp.window());
-                hide_from_taskbar(&comp.window());
-                set_rounded_corners(&comp.window());
-            }
-        });
+        // Configure window style, corners, and position while hidden
+        hide_from_taskbar(&component.window());
+        set_rounded_corners(&component.window());
+        center_window(&component.window());
+
+        // Now reveal the properly configured window
+        win_show(&component.window());
 
         // Background thread for hotkey/tray polling
         let weak_bg = component.as_weak();
         let vis_bg = visible.clone();
+        let prev_has_input_bg = prev_has_input.clone();
 
         let (initial_mods, initial_vk) = {
             let cfg = config.lock().unwrap();
@@ -301,31 +319,32 @@ impl Launcher {
                     if h.poll_toggle() {
                         let weak = weak_bg.clone();
                         let vis = vis_bg.clone();
+                        let prev_hi = prev_has_input_bg.clone();
                         let _ = slint::invoke_from_event_loop(move || {
                             if let Some(comp) = weak.upgrade() {
                                 let is_visible = *vis.lock().unwrap();
                                 if is_visible {
+                                    // Hide the window — reset all state
                                     *vis.lock().unwrap() = false;
                                     comp.set_search_query("".into());
                                     comp.set_search_results(std::rc::Rc::new(slint::VecModel::default()).into());
                                     comp.set_selected_index(-1);
+                                    comp.set_has_input(false);
+                                    *prev_hi.lock().unwrap() = false;
+                                    resize_window(&comp.window(), false);
                                     win_hide(&comp.window());
                                 } else {
+                                    // Show the window — reset state, position BEFORE showing
                                     *vis.lock().unwrap() = true;
                                     comp.set_search_query("".into());
                                     comp.set_search_results(std::rc::Rc::new(slint::VecModel::default()).into());
                                     comp.set_selected_index(-1);
+                                    comp.set_has_input(false);
+                                    *prev_hi.lock().unwrap() = false;
+                                    // Position and resize while still hidden
+                                    center_window(&comp.window());
+                                    // Then show and bring to foreground
                                     win_show(&comp.window());
-                                    let weak = comp.as_weak();
-                                    slint::Timer::single_shot(
-                                        std::time::Duration::from_millis(50),
-                                        move || {
-                                            if let Some(comp) = weak.upgrade() {
-                                                center_window(&comp.window());
-                                                hide_from_taskbar(&comp.window());
-                                            }
-                                        },
-                                    );
                                 }
                             }
                         });
@@ -370,6 +389,7 @@ fn win_show(window: &slint::Window) {
     if let Some(hwnd) = get_hwnd(window) {
         unsafe {
             windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(hwnd, 5);
+            windows_sys::Win32::UI::WindowsAndMessaging::SetForegroundWindow(hwnd);
         }
     }
 }
@@ -403,6 +423,8 @@ fn hide_from_taskbar(window: &slint::Window) {
     }
 }
 
+/// Reposition the window to screen center. Does NOT change size — size is
+/// managed solely by Slint via `window.set_size()` / the `height` binding.
 fn center_window(window: &slint::Window) {
     if let Some(hwnd) = get_hwnd(window) {
         unsafe {
@@ -410,7 +432,6 @@ fn center_window(window: &slint::Window) {
                 let dpi = windows_sys::Win32::UI::HiDpi::GetDpiForWindow(hwnd);
                 let scale = dpi as f64 / 96.0;
                 let physical_width = (640.0 * scale) as i32;
-                let physical_height = (80.0 * scale) as i32;
 
                 let screen_width = screen.right - screen.left;
                 let screen_height = screen.bottom - screen.top;
@@ -421,15 +442,14 @@ fn center_window(window: &slint::Window) {
                     hwnd,
                     std::ptr::null_mut(),
                     x, y,
-                    physical_width,
-                    physical_height,
-                    windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
+                    0, 0,
+                    windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOSIZE
+                        | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
                         | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
                 );
             }
         }
     }
-    window.set_size(slint::LogicalSize::new(640.0, 80.0));
 }
 
 fn get_screen_rect(hwnd: windows_sys::Win32::Foundation::HWND) -> Option<windows_sys::Win32::Foundation::RECT> {
@@ -446,43 +466,21 @@ fn get_screen_rect(hwnd: windows_sys::Win32::Foundation::HWND) -> Option<windows
     }
 }
 
+/// Resize the window by telling Slint the new logical size. Slint coordinates
+/// with winit to resize the Win32 window atomically — no intermediate frame
+/// with mismatched layout vs. window size.
 fn resize_window(window: &slint::Window, has_input: bool) {
-    let target_height = if has_input { 420.0 } else { 80.0 };
-
-    if let Some(hwnd) = get_hwnd(window) {
-        unsafe {
-            if let Some(screen) = get_screen_rect(hwnd) {
-                let dpi = windows_sys::Win32::UI::HiDpi::GetDpiForWindow(hwnd);
-                let scale = dpi as f64 / 96.0;
-                let physical_width = (640.0 * scale) as i32;
-                let physical_height = (target_height * scale) as i32;
-
-                let screen_width = screen.right - screen.left;
-                let screen_height = screen.bottom - screen.top;
-                let x = screen.left + (screen_width - physical_width) / 2;
-                let y = screen.top + screen_height / 4 - 40;
-
-                windows_sys::Win32::UI::WindowsAndMessaging::SetWindowPos(
-                    hwnd,
-                    std::ptr::null_mut(),
-                    x, y,
-                    physical_width,
-                    physical_height,
-                    windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
-                        | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
-                );
-            }
-        }
-    }
-    window.set_size(slint::LogicalSize::new(640.0, target_height as f32));
+    let target_height: f32 = if has_input { 420.0 } else { 80.0 };
+    window.set_size(slint::LogicalSize::new(640.0, target_height));
+    // Re-center horizontally (position doesn't change much, but ensures
+    // the window stays centered after height change).
+    center_window(window);
 }
 
 fn set_rounded_corners(window: &slint::Window) {
     if let Some(hwnd) = get_hwnd(window) {
         unsafe {
-            use windows_sys::Win32::Foundation::RECT;
             use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
-            use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect;
 
             const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
             const DWMWCP_ROUND: u32 = 2;
@@ -494,26 +492,6 @@ fn set_rounded_corners(window: &slint::Window) {
                 &preference as *const _ as *const _,
                 std::mem::size_of::<u32>() as u32,
             );
-
-            let mut rect: RECT = std::mem::zeroed();
-            GetWindowRect(hwnd, &mut rect);
-            let width = rect.right - rect.left;
-            let height = rect.bottom - rect.top;
-            let hrgn = windows_sys::Win32::Graphics::Gdi::CreateRoundRectRgn(
-                0, 0, width, height, 12, 12,
-            );
-            if !hrgn.is_null() {
-                windows_sys::Win32::UI::WindowsAndMessaging::SetWindowPos(
-                    hwnd,
-                    std::ptr::null_mut(),
-                    0, 0, 0, 0,
-                    windows_sys::Win32::UI::WindowsAndMessaging::SWP_FRAMECHANGED
-                        | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOMOVE
-                        | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOSIZE
-                        | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOZORDER
-                        | windows_sys::Win32::UI::WindowsAndMessaging::SWP_NOACTIVATE,
-                );
-            }
         }
     }
 }

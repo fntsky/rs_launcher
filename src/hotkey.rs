@@ -43,7 +43,7 @@ unsafe extern "system" fn hotkey_wnd_proc(
     lparam: windows_sys::Win32::Foundation::LPARAM,
 ) -> windows_sys::Win32::Foundation::LRESULT {
     if msg == WM_HOTKEY {
-        HOTKEY_PRESSED.store(true, Ordering::Relaxed);
+        HOTKEY_PRESSED.store(true, Ordering::Release);
         0
     } else {
         DefWindowProcW(hwnd, msg, wparam, lparam)
@@ -121,7 +121,7 @@ impl HotKeyManager {
 
     pub fn poll_toggle(&mut self) -> bool {
         self.pump_message_queue();
-        HOTKEY_PRESSED.swap(false, Ordering::Relaxed)
+        HOTKEY_PRESSED.swap(false, Ordering::Acquire)
     }
 
     fn pump_message_queue(&self) {
