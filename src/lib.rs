@@ -22,10 +22,11 @@ use std::sync::{Arc, Mutex};
 use tauri::{Manager, State};
 use serde::Serialize;
 
-use plugin::{PluginEngine, SearchResult};
+use plugin::{PluginEngine, PluginRegistry, SearchResult};
 
 pub struct AppState {
     engine: Arc<PluginEngine>,
+    registry: Arc<PluginRegistry>,
     config: Mutex<config::AppConfig>,
 }
 
@@ -99,12 +100,56 @@ fn get_config(state: State<'_, AppState>) -> ConfigDTO {
 
 #[tauri::command]
 fn save_hotkey(shortcut_str: String, app_handle: tauri::AppHandle) -> Result<(), String> {
-    // Parse shortcut string like "Ctrl+Alt+Space" and re-register
-    // For now, store the display string and re-register with Tauri's global shortcut API
     let app_handle_clone = app_handle.clone();
     register_shortcut_internal(&app_handle_clone, &shortcut_str)
         .map_err(|e| format!("Failed to register shortcut: {}", e))?;
     Ok(())
+}
+
+#[tauri::command]
+fn plugin_invoke(plugin_id: String, command: String, args: String, state: State<'_, AppState>) -> String {
+    match state.registry.find_dynamic(&plugin_id) {
+        Some(dynamic) => match dynamic.invoke(&command, &args) {
+            Ok(result) => result,
+            Err(e) => format!(r#"{{"error":"{}"}}"#, e),
+        },
+        None => format!(r#"{{"error":"plugin not found: {}"}}"#, plugin_id),
+    }
+}
+
+#[derive(Serialize, Clone)]
+pub struct RendererInfo {
+    pub plugin_id: String,
+    pub name: String,
+    pub html: String,
+    pub css: String,
+}
+
+#[tauri::command]
+fn get_plugin_renderers(state: State<'_, AppState>) -> Vec<RendererInfo> {
+    let mut renderers = Vec::new();
+    for plugin in state.registry.plugins() {
+        if let Some(dynamic) = plugin.as_dynamic() {
+            if dynamic.has_renderer() {
+                if let Some(html_path) = dynamic.renderer_path() {
+                    let html_content = std::fs::read_to_string(&html_path).unwrap_or_default();
+                    let css_path = html_path.with_extension("css");
+                    let css_content = if css_path.exists() {
+                        std::fs::read_to_string(&css_path).unwrap_or_default()
+                    } else {
+                        String::new()
+                    };
+                    renderers.push(RendererInfo {
+                        plugin_id: plugin.id().to_string(),
+                        name: plugin.name().to_string(),
+                        html: html_content,
+                        css: css_content,
+                    });
+                }
+            }
+        }
+    }
+    renderers
 }
 
 fn register_shortcut_internal(app: &tauri::AppHandle, shortcut_str: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -138,13 +183,14 @@ fn register_shortcut_internal(app: &tauri::AppHandle, shortcut_str: &str) -> Res
 
 pub fn run() {
     let registry = Arc::new(plugins::create_registry());
-    let engine = Arc::new(PluginEngine::new(registry));
+    let engine = Arc::new(PluginEngine::new(registry.clone()));
     let config = config::AppConfig::load();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(AppState {
             engine,
+            registry,
             config: Mutex::new(config),
         })
         .invoke_handler(tauri::generate_handler![
@@ -152,6 +198,8 @@ pub fn run() {
             execute_result,
             get_config,
             save_hotkey,
+            plugin_invoke,
+            get_plugin_renderers,
         ])
         .setup(|app| {
             // Register global shortcut

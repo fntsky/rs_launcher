@@ -369,7 +369,56 @@ async function init() {
     console.error('Failed to load config:', e);
   }
 
+  // Load plugin renderers
+  await loadPluginRenderers();
+
   searchInput.focus();
+}
+
+// ============================================================
+// Plugin Renderers
+// ============================================================
+async function loadPluginRenderers() {
+  try {
+    const renderers = await invoke('get_plugin_renderers');
+    if (!renderers || renderers.length === 0) return;
+
+    // Create container for plugin renderers if not exists
+    let container = document.getElementById('plugin-renderers');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'plugin-renderers';
+      // Insert after results area, before hint bar
+      resultsArea.parentNode.insertBefore(container, hintBar);
+    }
+
+    for (const r of renderers) {
+      // Create isolated container for each plugin
+      const pluginDiv = document.createElement('div');
+      pluginDiv.id = `plugin-renderer-${r.plugin_id}`;
+      pluginDiv.className = 'plugin-renderer';
+
+      // Inject CSS (scoped by plugin container ID)
+      if (r.css) {
+        const style = document.createElement('style');
+        style.textContent = r.css;
+        pluginDiv.appendChild(style);
+      }
+
+      // Inject HTML
+      if (r.html) {
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'plugin-renderer-content';
+        contentDiv.innerHTML = r.html;
+        pluginDiv.appendChild(contentDiv);
+      }
+
+      container.appendChild(pluginDiv);
+      console.log(`[PLUGIN] Loaded renderer: ${r.name} (${r.plugin_id})`);
+    }
+  } catch (e) {
+    console.error('Failed to load plugin renderers:', e);
+  }
 }
 
 // Run init when DOM is ready

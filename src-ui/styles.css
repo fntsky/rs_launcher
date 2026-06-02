@@ -370,6 +370,19 @@ html, body {
   color: var(--accent);
 }
 
+/* ============================================================
+   Plugin Renderers
+   ============================================================ */
+
+.plugin-renderer {
+  margin: 4px 0;
+  padding: 0;
+}
+
+.plugin-renderer-content {
+  padding: 8px 12px;
+}
+
 .setting-hint {
   font-size: 11px;
   color: var(--text-hint);

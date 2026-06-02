@@ -1,0 +1,16 @@
+{
+  "id": "hello_plugin",
+  "name": "Hello 插件",
+  "version": "1.0.0",
+  "description": "示例动态插件",
+  "author": "RS Launcher",
+  "dll": "hello_plugin.dll",
+  "renderer": "renderer/index.html",
+  "commands": [
+    {
+      "name": "greet",
+      "params": ["name"],
+      "description": "打招呼"
+    }
+  ]
+}
