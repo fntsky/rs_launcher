@@ -14,39 +14,24 @@ if /i "%PROFILE%"=="release" (
 set "PROJECT_DIR=%~dp0"
 if "%PROJECT_DIR:~-1%"=="\" set "PROJECT_DIR=%PROJECT_DIR:~0,-1%"
 
-echo [BUILD] Compiling workspace plugins (%CARGO_PROFILE%)...
-cargo build -p hello_plugin %CARGO_ARGS%
-if errorlevel 1 (
-    echo [BUILD] ERROR: Plugin compilation failed
-    exit /b 1
-)
-
 set "PLUGINS_DIR=%PROJECT_DIR%\plugins"
 set "WORKSPACE_TARGET=%PROJECT_DIR%\target\%CARGO_PROFILE%"
 
-rem Copy each plugin's DLL back to its source directory
+rem Build each plugin from plugins directory
+echo [BUILD] Compiling workspace plugins (%CARGO_PROFILE%)...
+set "BUILD_OK=1"
 for /d %%D in ("%PLUGINS_DIR%\*") do (
     if exist "%%D\plugin.json" (
-        set "plugin_dir=%%D"
         set "plugin_name=%%~nxD"
-
-        rem Read dll field from plugin.json
-        set "dll_name="
-        for /f "tokens=2 delims=:, " %%A in ('findstr /i "\"dll\"" "%%D\plugin.json"') do (
-            set "dll_name=%%~A"
-        )
-
-        if defined dll_name (
-            set "src_dll=%WORKSPACE_TARGET%\!dll_name!"
-            if exist "!src_dll!" (
-                copy /y "!src_dll!" "%%D\!dll_name!" >nul
-                echo [BUILD] Copied: !dll_name!
-            ) else (
-                echo [BUILD] WARNING: DLL not found: !src_dll!
-            )
+        echo [BUILD] Building plugin: !plugin_name!
+        cargo build -p !plugin_name! %CARGO_ARGS%
+        if errorlevel 1 (
+            echo [BUILD] ERROR: Plugin !plugin_name! compilation failed
+            set "BUILD_OK=0"
         )
     )
 )
+if not "!BUILD_OK!"=="1" exit /b 1
 
 rem Deploy plugins to target directory
 set "output_plugins=%WORKSPACE_TARGET%\plugins"
@@ -55,27 +40,34 @@ if not exist "%output_plugins%" mkdir "%output_plugins%"
 for /d %%D in ("%PLUGINS_DIR%\*") do (
     if exist "%%D\plugin.json" (
         set "plugin_name=%%~nxD"
+        set "plugin_src=%%D"
         set "dst_dir=%output_plugins%\!plugin_name!"
         if not exist "!dst_dir!" mkdir "!dst_dir!"
 
-        rem Read dll field
+        rem Read dll field from plugin.json via PowerShell
         set "dll_name="
-        for /f "tokens=2 delims=:, " %%A in ('findstr /i "\"dll\"" "%%D\plugin.json"') do (
+        for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-Content -Encoding UTF8 '!plugin_src!\plugin.json' ^| ConvertFrom-Json).dll"`) do (
             set "dll_name=%%~A"
         )
 
-        rem Copy DLL
-        if defined dll_name if exist "%%D\!dll_name!" (
-            copy /y "%%D\!dll_name!" "!dst_dir!\" >nul
+        rem Copy DLL from target directly
+        if defined dll_name (
+            set "src_dll=%WORKSPACE_TARGET%\!dll_name!"
+            if exist "!src_dll!" (
+                copy /y "!src_dll!" "!dst_dir!\" >nul
+            ) else (
+                echo [BUILD] WARNING: DLL not found: !src_dll!
+            )
+        ) else (
+            echo [BUILD] WARNING: Could not read dll field from !plugin_name!\plugin.json
         )
 
         rem Copy plugin.json
-        copy /y "%%D\plugin.json" "!dst_dir!\" >nul
+        copy /y "!plugin_src!\plugin.json" "!dst_dir!\" >nul
 
-        rem Copy renderer directory
-        if exist "%%D\renderer" (
-            if not exist "!dst_dir!\renderer" mkdir "!dst_dir!\renderer"
-            xcopy /y /q "%%D\renderer\*" "!dst_dir!\renderer\" >nul 2>nul
+        rem Copy renderer directory recursively
+        if exist "!plugin_src!\renderer" (
+            xcopy /y /e /q /i "!plugin_src!\renderer" "!dst_dir!\renderer\" >nul 2>nul
         )
 
         echo [BUILD] Deployed: !plugin_name!

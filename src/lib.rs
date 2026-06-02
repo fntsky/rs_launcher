@@ -123,6 +123,7 @@ pub struct RendererInfo {
     pub name: String,
     pub html: String,
     pub css: String,
+    pub js: String,
 }
 
 #[tauri::command]
@@ -139,11 +140,14 @@ fn get_plugin_renderers(state: State<'_, AppState>) -> Vec<RendererInfo> {
                     } else {
                         String::new()
                     };
+                    let js_path = html_path.parent().map(|p| p.join("app.js")).filter(|p| p.exists());
+                    let js_content = js_path.map(|p| std::fs::read_to_string(p).unwrap_or_default()).unwrap_or_default();
                     renderers.push(RendererInfo {
                         plugin_id: plugin.id().to_string(),
                         name: plugin.name().to_string(),
                         html: html_content,
                         css: css_content,
+                        js: js_content,
                     });
                 }
             }
@@ -161,17 +165,21 @@ fn get_plugin_renderer(plugin_id: String, state: State<'_, AppState>) -> Option<
     }
     let html_path = dynamic.renderer_path()?;
     let html_content = std::fs::read_to_string(&html_path).unwrap_or_default();
+    let js_path = html_path.parent().map(|p| p.join("app.js")).filter(|p| p.exists());
     let css_path = html_path.with_extension("css");
     let css_content = if css_path.exists() {
         std::fs::read_to_string(&css_path).unwrap_or_default()
     } else {
         String::new()
     };
+    let js_path = html_path.parent().map(|p| p.join("app.js")).filter(|p| p.exists());
+    let js_content = js_path.map(|p| std::fs::read_to_string(p).unwrap_or_default()).unwrap_or_default();
     Some(RendererInfo {
         plugin_id: plugin.id().to_string(),
         name: plugin.name().to_string(),
         html: html_content,
         css: css_content,
+        js: js_content,
     })
 }
 

@@ -148,38 +148,24 @@ unsafe fn extract_icon_to_png_inner(exe_path: &str) -> String {
         chunk.swap(0, 2);
     }
 
-    // Generate unique filename based on exe hash
-    let hash = seahash::hash(exe_path.as_bytes());
-    let temp_dir = std::env::temp_dir().join("rs_launcher_icons");
-    let _ = std::fs::create_dir_all(&temp_dir);
-    let png_path = temp_dir.join(format!("icon_{:016x}.png", hash));
-
-    // Save as PNG
-    if save_png(&png_path, &pixels, width as u32, height as u32) {
-        png_path.to_string_lossy().to_string()
-    } else {
-        String::new()
-    }
+    // Encode as PNG and return base64 data URL
+    encode_png_to_base64(&pixels, width as u32, height as u32)
 }
 
-fn save_png(path: &Path, pixels: &[u8], width: u32, height: u32) -> bool {
-    use std::io::BufWriter;
-    use std::fs::File;
+fn encode_png_to_base64(pixels: &[u8], width: u32, height: u32) -> String {
+    let mut png_buf = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(std::io::Cursor::new(&mut png_buf), width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = match encoder.write_header() {
+            Ok(w) => w,
+            Err(_) => return String::new(),
+        };
+        if writer.write_image_data(pixels).is_err() {
+            return String::new();
+        }
+    }
 
-    let file = match File::create(path) {
-        Ok(f) => f,
-        Err(_) => return false,
-    };
-
-    let w = BufWriter::new(file);
-    let mut encoder = png::Encoder::new(w, width, height);
-    encoder.set_color(png::ColorType::Rgba);
-    encoder.set_depth(png::BitDepth::Eight);
-
-    let mut writer = match encoder.write_header() {
-        Ok(w) => w,
-        Err(_) => return false,
-    };
-
-    writer.write_image_data(pixels).is_ok()
+    format!("data:image/png;base64,{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &png_buf))
 }

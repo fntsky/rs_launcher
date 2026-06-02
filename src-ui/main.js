@@ -95,7 +95,6 @@ searchInput.addEventListener('input', () => {
 
   debounceTimer = setTimeout(() => {
     // If a plugin render is active, pass query to its onSearchInput
-    // (if not yet ready, skip — don't fall through to default search)
     if (activeRenderer) {
       if (typeof window.onSearchInput === 'function') {
         window.onSearchInput(query);
@@ -143,7 +142,11 @@ function renderResults() {
     const delay = Math.min(i * 25, 200);
 
     const iconEl = r.icon_path
-      ? `<img class="result-icon" src="${convertIconPath(r.icon_path)}">`
+      ? (r.icon_path.startsWith('data:')
+        ? `<img class="result-icon" src="${r.icon_path}">`
+        : (r.icon_path.match(/^[\x00-\x7F]$/) || r.icon_path.length <= 2 || /[\u{1F000}-\u{1FFFF}]/u.test(r.icon_path)
+          ? `<span class="result-icon-emoji">${escapeHtml(r.icon_path)}</span>`
+          : `<img class="result-icon" src="${convertIconPath(r.icon_path)}">`))
       : '<div class="result-icon-placeholder">📄</div>';
 
     const templateName = r.template || 'default';
@@ -163,14 +166,10 @@ function convertIconPath(path) {
   if (!path) return '';
   try {
     if (typeof convertFileSrc === 'function') {
-      const url = convertFileSrc(path);
-      console.log('[ICON]', path, '->', url);
-      return url;
+      return convertFileSrc(path);
     }
-    console.error('[ICON] convertFileSrc is not a function');
     return '';
   } catch (e) {
-    console.error('[ICON] convertFileSrc error:', e, 'path:', path);
     return '';
   }
 }
@@ -330,13 +329,15 @@ async function activateRenderer(pluginId) {
 
     // Inject renderer HTML into resultsList (same container as search results)
     resultsList.innerHTML = renderer.html || '';
-    // innerHTML doesn't execute <script> tags, manually run them
-    const scripts = resultsList.querySelectorAll('script');
-    scripts.forEach(script => {
-      const newScript = document.createElement('script');
-      newScript.textContent = script.textContent;
-      script.parentNode.replaceChild(newScript, script);
-    });
+
+    // Execute renderer JS (via eval to bypass CSP inline script restriction)
+    if (renderer.js) {
+      try {
+        (0, eval)(renderer.js);
+      } catch (e) {
+        console.error('[Renderer] JS eval failed:', e);
+      }
+    }
 
     // Show results area, hide hint
     resultsArea.classList.remove('hidden');
@@ -348,7 +349,7 @@ async function activateRenderer(pluginId) {
     searchInput.value = '';
     searchInput.focus();
   } catch (e) {
-    console.error('Activate renderer failed:', e);
+    console.error('[Renderer] activateRenderer failed:', e);
   }
 }
 
