@@ -68,7 +68,7 @@ mod tests {
                 relevance: 0.5,
                 icon_path: String::new(),
                 action: "execute".to_string(),
-                item_html: String::new(),
+                template: "default".to_string(),
             }]
         }
         fn execute(&self, _result: &SearchResult) {}

@@ -26,6 +26,28 @@ let currentView = 'search'; // 'search' | 'plugin'
 let activePluginId = null;
 
 // ============================================================
+// Item Templates
+// ============================================================
+const TEMPLATES = {
+  default: (r, iconEl) => `
+    ${iconEl}
+    <div class="result-text">
+      <div class="result-title">${escapeHtml(r.title)}</div>
+      <div class="result-subtitle" title="${escapeHtml(r.subtitle)}">${escapeHtml(r.subtitle)}</div>
+    </div>
+  `,
+  compact: (r) => `
+    <div style="display:flex;align-items:center;gap:10px;width:100%">
+      <span style="font-size:24px">${escapeHtml(r.icon_path || '📄')}</span>
+      <div>
+        <div style="font-weight:500">${escapeHtml(r.title)}</div>
+        <div style="font-size:12px;color:#999">${escapeHtml(r.subtitle)}</div>
+      </div>
+    </div>
+  `,
+};
+
+// ============================================================
 // DOM Elements
 // ============================================================
 const searchInput = document.getElementById('search-input');
@@ -116,27 +138,16 @@ function renderResults() {
     const selected = i === selectedIndex ? ' selected' : '';
     const delay = Math.min(i * 25, 200);
 
-    if (r.item_html) {
-      // Plugin provides complete list item HTML
-      return `
-        <div class="result-item${selected}" data-index="${i}" data-plugin-id="${r.plugin_id}" style="animation-delay: ${delay}ms">
-          ${r.item_html}
-        </div>
-      `;
-    }
-
-    // Default template (icon + title + subtitle)
     const iconEl = r.icon_path
       ? `<img class="result-icon" src="${convertIconPath(r.icon_path)}">`
       : '<div class="result-icon-placeholder">📄</div>';
 
+    const templateName = r.template || 'default';
+    const templateFn = TEMPLATES[templateName] || TEMPLATES.default;
+
     return `
       <div class="result-item${selected}" data-index="${i}" data-plugin-id="${r.plugin_id}" style="animation-delay: ${delay}ms">
-        ${iconEl}
-        <div class="result-text">
-          <div class="result-title">${escapeHtml(r.title)}</div>
-          <div class="result-subtitle" title="${escapeHtml(r.subtitle)}">${escapeHtml(r.subtitle)}</div>
-        </div>
+        ${templateFn(r, iconEl)}
       </div>
     `;
   }).join('');

@@ -38,7 +38,7 @@ pub struct SearchResultDTO {
     pub relevance: f64,
     pub icon_path: String,
     pub action: String,
-    pub item_html: String,
+    pub template: String,
 }
 
 impl From<SearchResult> for SearchResultDTO {
@@ -50,7 +50,7 @@ impl From<SearchResult> for SearchResultDTO {
             relevance: r.relevance,
             icon_path: r.icon_path,
             action: r.action,
-            item_html: r.item_html,
+            template: r.template,
         }
     }
 }

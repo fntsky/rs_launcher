@@ -238,7 +238,7 @@ impl Plugin for AppSearchPlugin {
                     relevance,
                     icon_path: app.icon_path.clone(),
                     action: "execute".to_string(),
-                    item_html: String::new(),
+                    template: "default".to_string(),
                 })
             })
             .collect();

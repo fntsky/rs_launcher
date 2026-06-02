@@ -201,12 +201,16 @@ fn parse_search_results(json: &str) -> Vec<SearchResult> {
         icon_path: String,
         #[serde(default = "default_execute")]
         action: String,
-        #[serde(default)]
-        item_html: String,
+        #[serde(default = "default_template")]
+        template: String,
     }
 
     fn default_execute() -> String {
         "execute".to_string()
+    }
+
+    fn default_template() -> String {
+        "default".to_string()
     }
 
     match serde_json::from_str::<Vec<Raw>>(json) {
@@ -217,7 +221,7 @@ fn parse_search_results(json: &str) -> Vec<SearchResult> {
             relevance: r.relevance,
             icon_path: r.icon_path,
             action: r.action,
-            item_html: r.item_html,
+            template: r.template,
         }).collect(),
         Err(e) => {
             eprintln!("[LOADER] 解析 DLL 查询结果 JSON 失败: {}", e);

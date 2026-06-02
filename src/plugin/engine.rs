@@ -92,7 +92,7 @@ mod tests {
                     relevance: 0.5,
                     icon_path: String::new(),
                     action: "execute".to_string(),
-                    item_html: String::new(),
+                    template: "default".to_string(),
                 },
                 SearchResult {
                     plugin_id: self.id.clone(),
@@ -101,7 +101,7 @@ mod tests {
                     relevance: 0.1,
                     icon_path: String::new(),
                     action: "execute".to_string(),
-                    item_html: String::new(),
+                    template: "default".to_string(),
                 },
             ]
         }
@@ -151,7 +151,7 @@ mod tests {
             relevance: 0.5,
             icon_path: String::new(),
             action: "execute".to_string(),
-            item_html: String::new(),
+            template: "default".to_string(),
         };
         engine.execute(&result);
     }

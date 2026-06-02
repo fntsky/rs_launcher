@@ -17,14 +17,10 @@ impl HelloPlugin {
             } else {
                 format!("Hello, {}!", input)
             };
-            let item_html = r#"<div style="display:flex;align-items:center;gap:10px;width:100%"><span style="font-size:24px">👋</span><div><div style="font-weight:500">"#.to_string()
-                + &title
-                + r#"</div><div style="font-size:12px;color:#999">Open the Hello plugin</div></div></div>"#;
             format!(
-                r#"[{{"plugin_id":"hello_plugin","title":"{}","subtitle":"来自 Hello 插件的问候","relevance":{},"icon_path":"","action":"open_renderer","item_html":"{}"}}]"#,
+                r#"[{{"plugin_id":"hello_plugin","title":"{}","subtitle":"来自 Hello 插件的问候","relevance":{},"icon_path":"","action":"open_renderer","template":"compact"}}]"#,
                 title.replace('"', "\\\""),
                 relevance,
-                item_html.replace('\\', "\\\\").replace('"', "\\\""),
             )
         } else {
             "[]".to_string()
