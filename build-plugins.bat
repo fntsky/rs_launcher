@@ -12,7 +12,7 @@ if errorlevel 1 (
 )
 
 set "PROJECT_DIR=%~dp0"
-if "%PROJECT_DIR:~-1%"=="\" set "PROJECT_DIR=%PROJECT_DIR:~0,-1%"
+if "%PROJECT_DIR:~-1%"=="\" set "PROJECT_DIR=%PROJECT_DIR:~0,-1"
 
 set "PLUGINS_DIR=%PROJECT_DIR%\plugins"
 set "WORKSPACE_TARGET=%PROJECT_DIR%\target\release"

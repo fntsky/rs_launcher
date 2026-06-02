@@ -1,14 +1,10 @@
 {
   "name": "rs-launcher",
-  "private": true,
   "version": "0.2.0",
-  "type": "module",
   "scripts": {
-    "tauri": "tauri",
-    "dev": "bash build-plugins.sh target/debug && tauri dev",
-    "build": "cargo build -p hello_plugin --release && bash build-plugins.sh target/release && tauri build",
-    "build:plugins": "bash build-plugins.sh target/debug",
-    "build:plugins:bat": "build-plugins.bat target\\debug"
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build-plugins": "build-plugins.bat"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

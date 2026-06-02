@@ -4,7 +4,9 @@
   "version": "0.2.0",
   "identifier": "com.rs-launcher.app",
   "build": {
-    "frontendDist": "src-ui"
+    "frontendDist": "src-ui",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
   },
   "app": {
     "withGlobalTauri": true,
