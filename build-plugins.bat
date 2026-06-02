@@ -1,21 +1,28 @@
 @echo off
 setlocal enabledelayedexpansion
 
-set "TARGET_DIR=%~1"
-if "%TARGET_DIR%"=="" set "TARGET_DIR=target\debug"
+set "PROFILE=%~1"
+if "%PROFILE%"=="" set "PROFILE=debug"
+if /i "%PROFILE%"=="release" (
+    set "CARGO_ARGS=--release"
+    set "CARGO_PROFILE=release"
+) else (
+    set "CARGO_ARGS="
+    set "CARGO_PROFILE=debug"
+)
 
-echo [BUILD] Compiling workspace plugin crates...
-cargo build -p hello_plugin --release
+set "PROJECT_DIR=%~dp0"
+if "%PROJECT_DIR:~-1%"=="\" set "PROJECT_DIR=%PROJECT_DIR:~0,-1%"
+
+echo [BUILD] Compiling workspace plugins (%CARGO_PROFILE%)...
+cargo build -p hello_plugin %CARGO_ARGS%
 if errorlevel 1 (
     echo [BUILD] ERROR: Plugin compilation failed
     exit /b 1
 )
 
-set "PROJECT_DIR=%~dp0"
-if "%PROJECT_DIR:~-1%"=="\" set "PROJECT_DIR=%PROJECT_DIR:~0,-1"
-
 set "PLUGINS_DIR=%PROJECT_DIR%\plugins"
-set "WORKSPACE_TARGET=%PROJECT_DIR%\target\release"
+set "WORKSPACE_TARGET=%PROJECT_DIR%\target\%CARGO_PROFILE%"
 
 rem Copy each plugin's DLL back to its source directory
 for /d %%D in ("%PLUGINS_DIR%\*") do (
@@ -23,12 +30,10 @@ for /d %%D in ("%PLUGINS_DIR%\*") do (
         set "plugin_dir=%%D"
         set "plugin_name=%%~nxD"
 
-        rem Read dll field: find the line with "dll", extract value between quotes
+        rem Read dll field from plugin.json
         set "dll_name="
-        for /f "tokens=2 delims=:," %%A in ('findstr /i "\"dll\"" "%%D\plugin.json"') do (
-            for /f "tokens=2 delims=\"" %%B in ("%%A") do (
-                set "dll_name=%%B"
-            )
+        for /f "tokens=2 delims=:, " %%A in ('findstr /i "\"dll\"" "%%D\plugin.json"') do (
+            set "dll_name=%%~A"
         )
 
         if defined dll_name (
@@ -44,7 +49,7 @@ for /d %%D in ("%PLUGINS_DIR%\*") do (
 )
 
 rem Deploy plugins to target directory
-set "output_plugins=%TARGET_DIR%\plugins"
+set "output_plugins=%WORKSPACE_TARGET%\plugins"
 if not exist "%output_plugins%" mkdir "%output_plugins%"
 
 for /d %%D in ("%PLUGINS_DIR%\*") do (
@@ -55,10 +60,8 @@ for /d %%D in ("%PLUGINS_DIR%\*") do (
 
         rem Read dll field
         set "dll_name="
-        for /f "tokens=2 delims=:," %%A in ('findstr /i "\"dll\"" "%%D\plugin.json"') do (
-            for /f "tokens=2 delims=\"" %%B in ("%%A") do (
-                set "dll_name=%%B"
-            )
+        for /f "tokens=2 delims=:, " %%A in ('findstr /i "\"dll\"" "%%D\plugin.json"') do (
+            set "dll_name=%%~A"
         )
 
         rem Copy DLL

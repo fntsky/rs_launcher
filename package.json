@@ -2,8 +2,8 @@
   "name": "rs-launcher",
   "version": "0.2.0",
   "scripts": {
-    "dev": "tauri dev",
-    "build": "tauri build",
+    "dev": "build-plugins.bat && tauri dev",
+    "build": "build-plugins.bat release && tauri build",
     "build-plugins": "build-plugins.bat"
   },
   "devDependencies": {
