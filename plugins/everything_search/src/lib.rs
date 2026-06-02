@@ -1,13 +1,31 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::os::windows::ffi::OsStrExt;
+use std::sync::Mutex;
+use std::collections::HashMap;
+use once_cell::sync::Lazy;
 
 pub struct EverythingPlugin;
+
+static ICON_CACHE: Lazy<Mutex<HashMap<String, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn extract_file_icon(path: &str) -> String {
     use windows_sys::Win32::UI::Shell::{SHGetFileInfoW, SHGFI_ICON, SHGFI_SMALLICON, SHFILEINFOW};
     use windows_sys::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo};
     use windows_sys::Win32::Graphics::Gdi::{GetObjectW, BITMAP};
+
+    // Extract extension for cache key
+    let cache_key = std::path::Path::new(path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("_folder_")
+        .to_lowercase();
+    // Check cache first
+    if let Ok(cache) = ICON_CACHE.lock() {
+        if let Some(cached) = cache.get(&cache_key) {
+            return cached.clone();
+        }
+    }
 
     let wide_path: Vec<u16> = std::ffi::OsStr::new(path)
         .encode_wide()
@@ -47,6 +65,12 @@ fn extract_file_icon(path: &str) -> String {
 
     let result = icon_to_png(shfi.hIcon, width, height);
     unsafe { DestroyIcon(shfi.hIcon); }
+
+    // Store in cache by extension
+    if let Ok(mut cache) = ICON_CACHE.lock() {
+        cache.insert(cache_key, result.clone());
+    }
+
     result
 }
 

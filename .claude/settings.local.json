@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build *)",
+      "Bash(cargo run *)",
+      "WebSearch",
+      "WebFetch(domain:www.fltk.org)",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:microsoft.github.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.iced.rs)",
+      "Bash(cargo search *)",
+      "WebFetch(domain:docs.slint.dev)",
+      "WebFetch(domain:slint.dev)",
+      "WebFetch(domain:releases.slint.dev)",
+      "Bash(gh api *)",
+      "WebFetch(domain:crates.io)",
+      "Bash(gh auth *)",
+      "Bash(grep -r raw_window_handle __TRACKED_VAR__/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/i-slint-core-1.16.1/api.rs)",
+      "Bash(grep *)",
+      "Bash(cargo test *)",
+      "Bash(cargo check *)"
+    ]
+  }
+}

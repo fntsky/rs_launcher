@@ -782,6 +782,7 @@ dependencies = [
  "base64 0.22.1",
  "everything-ipc",
  "image",
+ "once_cell",
  "serde_json",
  "windows-sys 0.59.0",
 ]
