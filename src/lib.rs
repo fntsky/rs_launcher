@@ -37,6 +37,8 @@ pub struct SearchResultDTO {
     pub subtitle: String,
     pub relevance: f64,
     pub icon_path: String,
+    pub action: String,
+    pub item_html: String,
 }
 
 impl From<SearchResult> for SearchResultDTO {
@@ -47,6 +49,8 @@ impl From<SearchResult> for SearchResultDTO {
             subtitle: r.subtitle,
             relevance: r.relevance,
             icon_path: r.icon_path,
+            action: r.action,
+            item_html: r.item_html,
         }
     }
 }
@@ -58,9 +62,6 @@ pub struct ConfigDTO {
 
 #[tauri::command]
 fn search(query: String, state: State<'_, AppState>) -> Vec<SearchResultDTO> {
-    if query.is_empty() {
-        return Vec::new();
-    }
     state.engine.query(&query).into_iter().map(|r| r.into()).collect()
 }
 
@@ -152,6 +153,29 @@ fn get_plugin_renderers(state: State<'_, AppState>) -> Vec<RendererInfo> {
     renderers
 }
 
+#[tauri::command]
+fn get_plugin_renderer(plugin_id: String, state: State<'_, AppState>) -> Option<RendererInfo> {
+    let plugin = state.registry.find_by_id(&plugin_id)?;
+    let dynamic = plugin.as_dynamic()?;
+    if !dynamic.has_renderer() {
+        return None;
+    }
+    let html_path = dynamic.renderer_path()?;
+    let html_content = std::fs::read_to_string(&html_path).unwrap_or_default();
+    let css_path = html_path.with_extension("css");
+    let css_content = if css_path.exists() {
+        std::fs::read_to_string(&css_path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    Some(RendererInfo {
+        plugin_id: plugin.id().to_string(),
+        name: plugin.name().to_string(),
+        html: html_content,
+        css: css_content,
+    })
+}
+
 fn register_shortcut_internal(app: &tauri::AppHandle, shortcut_str: &str) -> Result<(), Box<dyn std::error::Error>> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
@@ -200,6 +224,7 @@ pub fn run() {
             save_hotkey,
             plugin_invoke,
             get_plugin_renderers,
+            get_plugin_renderer,
         ])
         .setup(|app| {
             // Register global shortcut

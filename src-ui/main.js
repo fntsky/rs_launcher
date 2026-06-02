@@ -22,6 +22,8 @@ let isSettingsOpen = false;
 let isRecordingHotkey = false;
 let lastSearchId = 0;
 let debounceTimer = null;
+let currentView = 'search'; // 'search' | 'plugin'
+let activePluginId = null;
 
 // ============================================================
 // DOM Elements
@@ -36,6 +38,10 @@ const modalClose = document.getElementById('modal-close');
 const hotkeyRecorder = document.getElementById('hotkey-recorder');
 const hotkeyDisplay = document.getElementById('hotkey-display');
 const hotkeyHint = document.getElementById('hotkey-hint');
+const pluginView = document.getElementById('plugin-view');
+const pluginViewTitle = document.getElementById('plugin-view-title');
+const pluginRendererContent = document.getElementById('plugin-renderer-content');
+const pluginBackBtn = document.getElementById('plugin-back-btn');
 
 // ============================================================
 // Window Size Management
@@ -43,11 +49,20 @@ const hotkeyHint = document.getElementById('hotkey-hint');
 const WINDOW_WIDTH = 640;
 const WINDOW_HEIGHT_COLLAPSED = 80;
 const WINDOW_HEIGHT_EXPANDED = 420;
+const WINDOW_HEIGHT_PLUGIN = 500;
 
 async function setWindowSize(hasResults) {
   const height = hasResults ? WINDOW_HEIGHT_EXPANDED : WINDOW_HEIGHT_COLLAPSED;
   try {
     await appWindow.setSize(new LogicalSize(WINDOW_WIDTH, height));
+  } catch (e) {
+    console.error('Failed to set window size:', e);
+  }
+}
+
+async function setPluginWindowSize() {
+  try {
+    await appWindow.setSize(new LogicalSize(WINDOW_WIDTH, WINDOW_HEIGHT_PLUGIN));
   } catch (e) {
     console.error('Failed to set window size:', e);
   }
@@ -59,14 +74,6 @@ async function setWindowSize(hasResults) {
 searchInput.addEventListener('input', () => {
   const query = searchInput.value.trim();
   if (debounceTimer) clearTimeout(debounceTimer);
-
-  if (query === '') {
-    results = [];
-    selectedIndex = -1;
-    renderResults();
-    setWindowSize(false);
-    return;
-  }
 
   debounceTimer = setTimeout(async () => {
     const searchId = ++lastSearchId;
@@ -108,12 +115,23 @@ function renderResults() {
   resultsList.innerHTML = results.map((r, i) => {
     const selected = i === selectedIndex ? ' selected' : '';
     const delay = Math.min(i * 25, 200);
+
+    if (r.item_html) {
+      // Plugin provides complete list item HTML
+      return `
+        <div class="result-item${selected}" data-index="${i}" data-plugin-id="${r.plugin_id}" style="animation-delay: ${delay}ms">
+          ${r.item_html}
+        </div>
+      `;
+    }
+
+    // Default template (icon + title + subtitle)
     const iconEl = r.icon_path
       ? `<img class="result-icon" src="${convertIconPath(r.icon_path)}">`
       : '<div class="result-icon-placeholder">📄</div>';
 
     return `
-      <div class="result-item${selected}" data-index="${i}" style="animation-delay: ${delay}ms">
+      <div class="result-item${selected}" data-index="${i}" data-plugin-id="${r.plugin_id}" style="animation-delay: ${delay}ms">
         ${iconEl}
         <div class="result-text">
           <div class="result-title">${escapeHtml(r.title)}</div>
@@ -169,6 +187,13 @@ resultsList.addEventListener('error', (e) => {
 // Keyboard Navigation
 // ============================================================
 document.addEventListener('keydown', (e) => {
+  // Plugin view: Esc returns to search
+  if (currentView === 'plugin' && e.key === 'Escape') {
+    e.preventDefault();
+    closePluginRenderer();
+    return;
+  }
+
   if (isSettingsOpen) {
     if (isRecordingHotkey) {
       handleHotkeyRecord(e);
@@ -231,12 +256,18 @@ resultsList.addEventListener('click', (e) => {
 });
 
 // ============================================================
-// Execute Result
+// Execute Result — action dispatch
 // ============================================================
 async function executeResult(index) {
   const result = results[index];
   if (!result) return;
 
+  if (result.action === 'open_renderer') {
+    openPluginRenderer(result.plugin_id);
+    return;
+  }
+
+  // Default: execute action (open app, etc.)
   try {
     await invoke('execute_result', { subtitle: result.subtitle });
   } catch (e) {
@@ -245,6 +276,66 @@ async function executeResult(index) {
 
   hideWindow();
 }
+
+// ============================================================
+// Plugin Renderer Navigation
+// ============================================================
+async function openPluginRenderer(pluginId) {
+  try {
+    const renderer = await invoke('get_plugin_renderer', { pluginId });
+    if (!renderer) {
+      console.error('No renderer found for plugin:', pluginId);
+      return;
+    }
+
+    activePluginId = pluginId;
+    currentView = 'plugin';
+
+    // Update plugin view title
+    pluginViewTitle.textContent = renderer.name;
+
+    // Inject CSS
+    let styleEl = document.getElementById('plugin-renderer-style');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'plugin-renderer-style';
+      document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = renderer.css || '';
+
+    // Inject HTML
+    pluginRendererContent.innerHTML = renderer.html || '';
+
+    // Switch views
+    resultsArea.classList.add('hidden');
+    hintBar.classList.add('hidden');
+    pluginView.classList.remove('hidden');
+    await setPluginWindowSize();
+  } catch (e) {
+    console.error('Open renderer failed:', e);
+  }
+}
+
+function closePluginRenderer() {
+  if (currentView !== 'plugin') return;
+
+  currentView = 'search';
+  activePluginId = null;
+
+  // Clear renderer content
+  pluginRendererContent.innerHTML = '';
+  const styleEl = document.getElementById('plugin-renderer-style');
+  if (styleEl) styleEl.textContent = '';
+
+  // Switch views
+  pluginView.classList.add('hidden');
+  resultsArea.classList.remove('hidden');
+  hintBar.classList.remove('hidden');
+  searchInput.focus();
+  setWindowSize(results.length > 0);
+}
+
+pluginBackBtn.addEventListener('click', closePluginRenderer);
 
 // ============================================================
 // Window Visibility
@@ -265,6 +356,7 @@ async function hideWindow() {
 // Focus input when window becomes visible
 appWindow.onFocusChanged(({ payload: focused }) => {
   if (focused) {
+    if (currentView === 'plugin') return; // Don't steal focus from plugin view
     searchInput.focus();
   }
 });
@@ -369,56 +461,19 @@ async function init() {
     console.error('Failed to load config:', e);
   }
 
-  // Load plugin renderers
-  await loadPluginRenderers();
-
-  searchInput.focus();
-}
-
-// ============================================================
-// Plugin Renderers
-// ============================================================
-async function loadPluginRenderers() {
+  // Load default items (empty input search)
   try {
-    const renderers = await invoke('get_plugin_renderers');
-    if (!renderers || renderers.length === 0) return;
-
-    // Create container for plugin renderers if not exists
-    let container = document.getElementById('plugin-renderers');
-    if (!container) {
-      container = document.createElement('div');
-      container.id = 'plugin-renderers';
-      // Insert after results area, before hint bar
-      resultsArea.parentNode.insertBefore(container, hintBar);
-    }
-
-    for (const r of renderers) {
-      // Create isolated container for each plugin
-      const pluginDiv = document.createElement('div');
-      pluginDiv.id = `plugin-renderer-${r.plugin_id}`;
-      pluginDiv.className = 'plugin-renderer';
-
-      // Inject CSS (scoped by plugin container ID)
-      if (r.css) {
-        const style = document.createElement('style');
-        style.textContent = r.css;
-        pluginDiv.appendChild(style);
-      }
-
-      // Inject HTML
-      if (r.html) {
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'plugin-renderer-content';
-        contentDiv.innerHTML = r.html;
-        pluginDiv.appendChild(contentDiv);
-      }
-
-      container.appendChild(pluginDiv);
-      console.log(`[PLUGIN] Loaded renderer: ${r.name} (${r.plugin_id})`);
+    results = await invoke('search', { query: '' });
+    selectedIndex = results.length > 0 ? 0 : -1;
+    renderResults();
+    if (results.length > 0) {
+      await setWindowSize(true);
     }
   } catch (e) {
-    console.error('Failed to load plugin renderers:', e);
+    console.error('Failed to load default items:', e);
   }
+
+  searchInput.focus();
 }
 
 // Run init when DOM is ready

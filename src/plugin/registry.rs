@@ -67,6 +67,8 @@ mod tests {
                 subtitle: String::new(),
                 relevance: 0.5,
                 icon_path: String::new(),
+                action: "execute".to_string(),
+                item_html: String::new(),
             }]
         }
         fn execute(&self, _result: &SearchResult) {}

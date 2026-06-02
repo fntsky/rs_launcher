@@ -14,9 +14,6 @@ impl PluginEngine {
 
     /// 并行查询所有插件，合并结果按 relevance 降序排序
     pub fn query(&self, input: &str) -> Vec<SearchResult> {
-        if input.is_empty() {
-            return Vec::new();
-        }
 
         eprintln!("[ENGINE] 查询输入: \"{}\"", input);
 
@@ -94,6 +91,8 @@ mod tests {
                     subtitle: String::new(),
                     relevance: 0.5,
                     icon_path: String::new(),
+                    action: "execute".to_string(),
+                    item_html: String::new(),
                 },
                 SearchResult {
                     plugin_id: self.id.clone(),
@@ -101,6 +100,8 @@ mod tests {
                     subtitle: String::new(),
                     relevance: 0.1,
                     icon_path: String::new(),
+                    action: "execute".to_string(),
+                    item_html: String::new(),
                 },
             ]
         }
@@ -133,7 +134,8 @@ mod tests {
 
         let engine = PluginEngine::new(Arc::new(registry));
         let results = engine.query("");
-        assert!(results.is_empty());
+        // 空输入也走 query，MockPlugin 对空输入返回结果
+        assert!(!results.is_empty());
     }
 
     #[test]
@@ -148,6 +150,8 @@ mod tests {
             subtitle: String::new(),
             relevance: 0.5,
             icon_path: String::new(),
+            action: "execute".to_string(),
+            item_html: String::new(),
         };
         engine.execute(&result);
     }

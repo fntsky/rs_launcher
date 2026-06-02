@@ -19,6 +19,14 @@ pub struct SearchResult {
     pub relevance: f64,
     #[serde(default)]
     pub icon_path: String,
+    #[serde(default = "default_execute")]
+    pub action: String,
+    #[serde(default)]
+    pub item_html: String,
+}
+
+fn default_execute() -> String {
+    "execute".to_string()
 }
 
 /// 插件 trait
