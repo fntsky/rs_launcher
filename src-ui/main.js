@@ -63,7 +63,7 @@ const hotkeyHint = document.getElementById('hotkey-hint');
 const pluginView = document.getElementById('plugin-view');
 const pluginViewTitle = document.getElementById('plugin-view-title');
 const pluginRendererContent = document.getElementById('plugin-renderer-content');
-const pluginBackBtn = document.getElementById('plugin-back-btn');
+const backBtn = document.getElementById('back-btn');
 
 // ============================================================
 // Window Size Management
@@ -98,6 +98,12 @@ searchInput.addEventListener('input', () => {
   if (debounceTimer) clearTimeout(debounceTimer);
 
   debounceTimer = setTimeout(async () => {
+    // In plugin renderer mode, route input to renderer's global function
+    if (currentView === 'plugin' && activePluginId && typeof window.onSearchInput === 'function') {
+      window.onSearchInput(searchInput.value);
+      return;
+    }
+
     const searchId = ++lastSearchId;
     try {
       const res = await invoke('search', { query });
@@ -203,6 +209,12 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     closePluginRenderer();
     return;
+  }
+
+  // Plugin view: route navigation keys to renderer's global function
+  if (currentView === 'plugin' && activePluginId && typeof window.onPluginKeyDown === 'function') {
+    window.onPluginKeyDown(e);
+    if (e.defaultPrevented) return;
   }
 
   if (isSettingsOpen) {
@@ -321,7 +333,13 @@ async function openPluginRenderer(pluginId) {
     resultsArea.classList.add('hidden');
     hintBar.classList.add('hidden');
     pluginView.classList.remove('hidden');
+    backBtn.classList.add('visible');
     await setPluginWindowSize();
+
+    // Send current search input to renderer
+    if (typeof window.onSearchInput === 'function') {
+      window.onSearchInput(searchInput.value);
+    }
   } catch (e) {
     console.error('Open renderer failed:', e);
   }
@@ -342,11 +360,16 @@ function closePluginRenderer() {
   pluginView.classList.add('hidden');
   resultsArea.classList.remove('hidden');
   hintBar.classList.remove('hidden');
+  backBtn.classList.remove('visible');
+
+  // Clean up renderer global functions
+  delete window.onSearchInput;
+  delete window.onPluginKeyDown;
   searchInput.focus();
   setWindowSize(results.length > 0);
 }
 
-pluginBackBtn.addEventListener('click', closePluginRenderer);
+backBtn.addEventListener('click', closePluginRenderer);
 
 // ============================================================
 // Window Visibility
@@ -367,7 +390,6 @@ async function hideWindow() {
 // Focus input when window becomes visible
 appWindow.onFocusChanged(({ payload: focused }) => {
   if (focused) {
-    if (currentView === 'plugin') return; // Don't steal focus from plugin view
     searchInput.focus();
   }
 });
@@ -376,6 +398,7 @@ appWindow.onFocusChanged(({ payload: focused }) => {
 let blurTimer = null;
 window.addEventListener('blur', () => {
   if (isSettingsOpen) return;
+  if (searchInput.value.trim() !== '') return;
   blurTimer = setTimeout(() => {
     hideWindow();
   }, 150);

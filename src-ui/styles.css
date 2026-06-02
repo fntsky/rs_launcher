@@ -96,6 +96,23 @@ html, body {
   color: var(--text-primary);
 }
 
+.back-btn {
+  visibility: hidden;
+  pointer-events: none;
+  font-size: 18px;
+  color: var(--text-secondary);
+  transition: color var(--transition-fast);
+}
+
+.back-btn.visible {
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.back-btn.visible:hover {
+  color: var(--text-primary);
+}
+
 /* ============================================================
    Hint Bar
    ============================================================ */
@@ -407,16 +424,6 @@ html, body {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
-}
-
-#plugin-back-btn {
-  font-size: 18px;
-  color: var(--text-secondary);
-  transition: color var(--transition-fast);
-}
-
-#plugin-back-btn:hover {
-  color: var(--text-primary);
 }
 
 #plugin-renderer-content {
