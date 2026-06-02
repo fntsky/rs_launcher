@@ -1,0 +1,92 @@
+.everything-search {
+  padding: 8px 0;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.ev-status {
+  padding: 12px 16px;
+  color: #ff6b6b;
+  font-size: 13px;
+  background: rgba(255, 107, 107, 0.1);
+  border-radius: 6px;
+  margin: 4px 0;
+}
+
+.ev-status.hidden {
+  display: none;
+}
+
+.ev-results {
+  display: flex;
+  flex-direction: column;
+}
+
+.ev-empty {
+  padding: 24px 16px;
+  color: #888;
+  font-size: 13px;
+  text-align: center;
+}
+
+.ev-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+
+.ev-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ev-item.selected {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.ev-icon {
+  font-size: 20px;
+  width: 28px;
+  text-align: center;
+}
+
+.ev-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ev-title {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ev-path {
+  font-size: 12px;
+  color: #888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.ev-size {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+
+.ev-folder-badge {
+  font-size: 11px;
+  color: #8be9fd;
+  background: rgba(139, 233, 253, 0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+}

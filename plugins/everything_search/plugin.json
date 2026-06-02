@@ -1,0 +1,10 @@
+{
+  "id": "everything_search",
+  "name": "Everything 文件搜索",
+  "version": "1.0.0",
+  "dll": "everything_search.dll",
+  "renderer": "renderer/index.html",
+  "commands": [
+    { "name": "search", "params": ["query"], "description": "搜索文件" }
+  ]
+}

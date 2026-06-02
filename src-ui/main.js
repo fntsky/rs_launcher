@@ -22,8 +22,7 @@ let isSettingsOpen = false;
 let isRecordingHotkey = false;
 let lastSearchId = 0;
 let debounceTimer = null;
-let currentView = 'search'; // 'search' | 'plugin'
-let activePluginId = null;
+let activeRenderer = null; // null = default search render, { pluginId, name } = plugin render
 
 // ============================================================
 // Item Templates
@@ -60,9 +59,6 @@ const modalClose = document.getElementById('modal-close');
 const hotkeyRecorder = document.getElementById('hotkey-recorder');
 const hotkeyDisplay = document.getElementById('hotkey-display');
 const hotkeyHint = document.getElementById('hotkey-hint');
-const pluginView = document.getElementById('plugin-view');
-const pluginViewTitle = document.getElementById('plugin-view-title');
-const pluginRendererContent = document.getElementById('plugin-renderer-content');
 const backBtn = document.getElementById('back-btn');
 
 // ============================================================
@@ -91,36 +87,38 @@ async function setPluginWindowSize() {
 }
 
 // ============================================================
-// Search
+// Search — always routes to the active render
 // ============================================================
 searchInput.addEventListener('input', () => {
-  const query = searchInput.value.trim();
+  const query = searchInput.value;
   if (debounceTimer) clearTimeout(debounceTimer);
 
-  debounceTimer = setTimeout(async () => {
-    // In plugin renderer mode, route input to renderer's global function
-    if (currentView === 'plugin' && activePluginId && typeof window.onSearchInput === 'function') {
-      window.onSearchInput(searchInput.value);
+  debounceTimer = setTimeout(() => {
+    // If a plugin render is active, pass query to its onSearchInput
+    // (if not yet ready, skip — don't fall through to default search)
+    if (activeRenderer) {
+      if (typeof window.onSearchInput === 'function') {
+        window.onSearchInput(query);
+      }
       return;
     }
 
+    // Default render: invoke search and render results
     const searchId = ++lastSearchId;
-    try {
-      const res = await invoke('search', { query });
-      // Discard stale results
+    invoke('search', { query }).then(res => {
       if (searchId !== lastSearchId) return;
       results = res;
       selectedIndex = results.length > 0 ? 0 : -1;
       renderResults();
       setWindowSize(results.length > 0);
-    } catch (e) {
+    }).catch(e => {
       console.error('Search error:', e);
-    }
+    });
   }, 80);
 });
 
 // ============================================================
-// Render Results
+// Render Results (default render)
 // ============================================================
 function renderResults() {
   if (results.length === 0 && searchInput.value.trim() !== '') {
@@ -158,7 +156,6 @@ function renderResults() {
     `;
   }).join('');
 
-  // Scroll selected item into view
   scrollToSelected();
 }
 
@@ -204,18 +201,20 @@ resultsList.addEventListener('error', (e) => {
 // Keyboard Navigation
 // ============================================================
 document.addEventListener('keydown', (e) => {
-  // Plugin view: Esc returns to search
-  if (currentView === 'plugin' && e.key === 'Escape') {
+  // Plugin render: Esc goes back to default render
+  if (activeRenderer && e.key === 'Escape') {
     e.preventDefault();
-    closePluginRenderer();
+    deactivateRenderer();
     return;
   }
 
-  // Plugin view: route navigation keys to renderer's global function
-  if (currentView === 'plugin' && activePluginId && typeof window.onPluginKeyDown === 'function') {
+  // Plugin render: route navigation keys to renderer
+  if (activeRenderer && typeof window.onPluginKeyDown === 'function') {
     window.onPluginKeyDown(e);
     if (e.defaultPrevented) return;
   }
+  // If renderer is active but onPluginKeyDown not ready, skip default handling
+  if (activeRenderer) return;
 
   if (isSettingsOpen) {
     if (isRecordingHotkey) {
@@ -286,7 +285,7 @@ async function executeResult(index) {
   if (!result) return;
 
   if (result.action === 'open_renderer') {
-    openPluginRenderer(result.plugin_id);
+    activateRenderer(result.plugin_id);
     return;
   }
 
@@ -301,21 +300,24 @@ async function executeResult(index) {
 }
 
 // ============================================================
-// Plugin Renderer Navigation
+// Renderer Activation / Deactivation
 // ============================================================
-async function openPluginRenderer(pluginId) {
+
+// Activate a plugin renderer: inject its HTML into resultsArea,
+// the renderer defines window.onSearchInput to receive search box input
+async function activateRenderer(pluginId) {
+  // Set activeRenderer immediately to block default search during async loading
+  activeRenderer = { pluginId, name: '' };
+
   try {
     const renderer = await invoke('get_plugin_renderer', { pluginId });
     if (!renderer) {
       console.error('No renderer found for plugin:', pluginId);
+      activeRenderer = null;
       return;
     }
 
-    activePluginId = pluginId;
-    currentView = 'plugin';
-
-    // Update plugin view title
-    pluginViewTitle.textContent = renderer.name;
+    activeRenderer.name = renderer.name;
 
     // Inject CSS
     let styleEl = document.getElementById('plugin-renderer-style');
@@ -326,50 +328,64 @@ async function openPluginRenderer(pluginId) {
     }
     styleEl.textContent = renderer.css || '';
 
-    // Inject HTML
-    pluginRendererContent.innerHTML = renderer.html || '';
+    // Inject renderer HTML into resultsList (same container as search results)
+    resultsList.innerHTML = renderer.html || '';
+    // innerHTML doesn't execute <script> tags, manually run them
+    const scripts = resultsList.querySelectorAll('script');
+    scripts.forEach(script => {
+      const newScript = document.createElement('script');
+      newScript.textContent = script.textContent;
+      script.parentNode.replaceChild(newScript, script);
+    });
 
-    // Switch views
-    resultsArea.classList.add('hidden');
+    // Show results area, hide hint
+    resultsArea.classList.remove('hidden');
     hintBar.classList.add('hidden');
-    pluginView.classList.remove('hidden');
     backBtn.classList.add('visible');
     await setPluginWindowSize();
 
-    // Send current search input to renderer
-    if (typeof window.onSearchInput === 'function') {
-      window.onSearchInput(searchInput.value);
-    }
+    // Clear search input so user starts fresh
+    searchInput.value = '';
+    searchInput.focus();
   } catch (e) {
-    console.error('Open renderer failed:', e);
+    console.error('Activate renderer failed:', e);
   }
 }
 
-function closePluginRenderer() {
-  if (currentView !== 'plugin') return;
+// Deactivate renderer: restore default search render
+function deactivateRenderer() {
+  if (!activeRenderer) return;
 
-  currentView = 'search';
-  activePluginId = null;
-
-  // Clear renderer content
-  pluginRendererContent.innerHTML = '';
-  const styleEl = document.getElementById('plugin-renderer-style');
-  if (styleEl) styleEl.textContent = '';
-
-  // Switch views
-  pluginView.classList.add('hidden');
-  resultsArea.classList.remove('hidden');
-  hintBar.classList.remove('hidden');
-  backBtn.classList.remove('visible');
+  activeRenderer = null;
 
   // Clean up renderer global functions
   delete window.onSearchInput;
   delete window.onPluginKeyDown;
+
+  // Clear renderer content
+  resultsList.innerHTML = '';
+  const styleEl = document.getElementById('plugin-renderer-style');
+  if (styleEl) styleEl.textContent = '';
+
+  // Restore default search view
+  backBtn.classList.remove('visible');
+  searchInput.value = '';
   searchInput.focus();
-  setWindowSize(results.length > 0);
+
+  // Re-trigger search with empty query to show default items
+  invoke('search', { query: '' }).then(res => {
+    results = res;
+    selectedIndex = results.length > 0 ? 0 : -1;
+    renderResults();
+    setWindowSize(results.length > 0);
+  }).catch(e => {
+    console.error('Search error:', e);
+    resultsArea.classList.add('hidden');
+    hintBar.classList.remove('hidden');
+  });
 }
 
-backBtn.addEventListener('click', closePluginRenderer);
+backBtn.addEventListener('click', deactivateRenderer);
 
 // ============================================================
 // Window Visibility
@@ -378,6 +394,17 @@ async function hideWindow() {
   searchInput.value = '';
   results = [];
   selectedIndex = -1;
+
+  // If renderer is active, deactivate it
+  if (activeRenderer) {
+    delete window.onSearchInput;
+    delete window.onPluginKeyDown;
+    activeRenderer = null;
+    backBtn.classList.remove('visible');
+    const styleEl = document.getElementById('plugin-renderer-style');
+    if (styleEl) styleEl.textContent = '';
+  }
+
   renderResults();
   await setWindowSize(false);
   try {

@@ -36,4 +36,4 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [workspace]
-members = ["plugins/hello_plugin"]
+members = ["plugins/hello_plugin", "plugins/everything_search"]
