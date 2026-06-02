@@ -246,33 +246,6 @@ impl Plugin for AppSearchPlugin {
         results.sort_by(|a, b| b.relevance.partial_cmp(&a.relevance).unwrap_or(std::cmp::Ordering::Equal));
         results
     }
-
-    fn execute(&self, result: &SearchResult) {
-        // Prefer lnk_path for execution — preserves shortcut metadata
-        // (working directory, arguments, icon, etc.)
-        let path = &result.subtitle;
-
-        let wide_path: Vec<u16> = OsStr::new(path)
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
-
-        let wide_open: Vec<u16> = OsStr::new("open")
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
-
-        unsafe {
-            windows_sys::Win32::UI::Shell::ShellExecuteW(
-                std::ptr::null_mut(),
-                wide_open.as_ptr(),
-                wide_path.as_ptr(),
-                std::ptr::null(),
-                std::ptr::null(),
-                windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOW,
-            );
-        }
-    }
 }
 
 #[cfg(test)]

@@ -44,34 +44,21 @@ impl PluginEngine {
         sorted.sort_by(|a, b| b.relevance.partial_cmp(&a.relevance).unwrap_or(std::cmp::Ordering::Equal));
         sorted
     }
-
-    /// 根据 plugin_id 找到对应插件执行动作
-    pub fn execute(&self, result: &SearchResult) {
-        if let Some(plugin) = self.registry.find_by_id(&result.plugin_id) {
-            eprintln!("[ENGINE] 执行: {} -> {} ({})", plugin.name(), result.title, result.subtitle);
-            plugin.execute(result);
-        } else {
-            eprintln!("[ENGINE] 未找到插件: {}", result.plugin_id);
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::plugin::Plugin;
-    use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct MockPlugin {
         id: String,
-        execute_count: AtomicUsize,
     }
 
     impl MockPlugin {
         fn new(id: &str) -> Self {
             Self {
                 id: id.to_string(),
-                execute_count: AtomicUsize::new(0),
             }
         }
     }
@@ -105,9 +92,6 @@ mod tests {
                 },
             ]
         }
-        fn execute(&self, _result: &SearchResult) {
-            self.execute_count.fetch_add(1, Ordering::Relaxed);
-        }
     }
 
     #[test]
@@ -134,25 +118,6 @@ mod tests {
 
         let engine = PluginEngine::new(Arc::new(registry));
         let results = engine.query("");
-        // 空输入也走 query，MockPlugin 对空输入返回结果
         assert!(!results.is_empty());
-    }
-
-    #[test]
-    fn execute_dispatches_to_plugin() {
-        let mut registry = PluginRegistry::new();
-        registry.register(Box::new(MockPlugin::new("a")));
-
-        let engine = PluginEngine::new(Arc::new(registry));
-        let result = SearchResult {
-            plugin_id: "a".to_string(),
-            title: "test".to_string(),
-            subtitle: String::new(),
-            relevance: 0.5,
-            icon_path: String::new(),
-            action: "execute".to_string(),
-            template: "default".to_string(),
-        };
-        engine.execute(&result);
     }
 }

@@ -7,7 +7,6 @@ mod icon;
 use tauri::LogicalPosition;
 
 fn center_window_top(window: &tauri::WebviewWindow) {
-    use tauri::Manager;
     if let Some(monitor) = window.primary_monitor().ok().flatten().or_else(|| window.available_monitors().ok().and_then(|m| m.into_iter().next())) {
         let screen_size = monitor.size();
         let scale = monitor.scale_factor();

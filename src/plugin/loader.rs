@@ -8,7 +8,6 @@ type FnCreate = unsafe extern "C" fn() -> *mut std::ffi::c_void;
 type FnDestroy = unsafe extern "C" fn(*mut std::ffi::c_void);
 type FnGetStr = unsafe extern "C" fn(*mut std::ffi::c_void) -> *const c_char;
 type FnQuery = unsafe extern "C" fn(*mut std::ffi::c_void, *const c_char) -> *const c_char;
-type FnExecute = unsafe extern "C" fn(*mut std::ffi::c_void, *const c_char);
 type FnFree = unsafe extern "C" fn(*const c_char);
 type FnInvoke = unsafe extern "C" fn(*mut std::ffi::c_void, *const c_char, *const c_char) -> *const c_char;
 
@@ -20,7 +19,6 @@ pub struct DynamicPlugin {
     plugin_ptr: *mut std::ffi::c_void,
     fn_destroy: FnDestroy,
     fn_query: FnQuery,
-    fn_execute: FnExecute,
     fn_free: FnFree,
     fn_invoke: Option<FnInvoke>,
     cached_id: String,
@@ -56,10 +54,6 @@ impl DynamicPlugin {
                 .get(b"plugin_query")
                 .map_err(|e| format!("DLL 缺少 plugin_query 导出: {}", e))?;
 
-            let fn_execute: FnExecute = *library
-                .get(b"plugin_execute")
-                .map_err(|e| format!("DLL 缺少 plugin_execute 导出: {}", e))?;
-
             let fn_free: FnFree = *library
                 .get(b"plugin_free_results")
                 .map_err(|e| format!("DLL 缺少 plugin_free_results 导出: {}", e))?;
@@ -84,7 +78,6 @@ impl DynamicPlugin {
                 plugin_ptr,
                 fn_destroy,
                 fn_query,
-                fn_execute,
                 fn_free,
                 fn_invoke,
                 cached_id,
@@ -120,10 +113,6 @@ impl DynamicPlugin {
     pub fn renderer_path(&self) -> Option<PathBuf> {
         self.manifest.renderer.as_ref().map(|r| self.plugin_dir.join(r))
     }
-
-    pub fn plugin_dir(&self) -> &PathBuf {
-        &self.plugin_dir
-    }
 }
 
 impl Plugin for DynamicPlugin {
@@ -155,22 +144,6 @@ impl Plugin for DynamicPlugin {
         }
     }
 
-    fn execute(&self, result: &SearchResult) {
-        unsafe {
-            let json = format!(
-                r#"{{"plugin_id":"{}","title":"{}","subtitle":"{}","relevance":{},"icon_path":"{}"}}"#,
-                result.plugin_id,
-                escape_json(&result.title),
-                escape_json(&result.subtitle),
-                result.relevance,
-                escape_json(&result.icon_path),
-            );
-            if let Ok(c_arg) = CString::new(json) {
-                (self.fn_execute)(self.plugin_ptr, c_arg.as_ptr());
-            }
-        }
-    }
-
     fn as_dynamic(&self) -> Option<&DynamicPlugin> {
         Some(self)
     }
@@ -184,10 +157,6 @@ impl Drop for DynamicPlugin {
             }
         }
     }
-}
-
-fn escape_json(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn parse_search_results(json: &str) -> Vec<SearchResult> {

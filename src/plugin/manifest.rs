@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 /// plugin.json 清单
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct PluginManifest {
     pub id: String,
     pub name: String,
@@ -19,6 +20,7 @@ pub struct PluginManifest {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct CommandDef {
     pub name: String,
     #[serde(default)]
@@ -28,6 +30,7 @@ pub struct CommandDef {
 }
 
 /// 插件扫描结果
+#[allow(dead_code)]
 pub struct ScannedPlugin {
     pub manifest: PluginManifest,
     pub plugin_dir: PathBuf,

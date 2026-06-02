@@ -40,15 +40,6 @@ impl AppConfig {
         Self::default()
     }
 
-    pub fn save(&self) -> std::io::Result<()> {
-        let path = Self::config_path();
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let data = serde_json::to_string_pretty(self)?;
-        std::fs::write(path, data)
-    }
-
     pub fn hotkey_display(&self) -> String {
         Self::hotkey_display_from(self.hotkey_mods, self.hotkey_vk)
     }
@@ -120,78 +111,5 @@ fn vk_to_name(vk: u32) -> String {
             format!("{}", c)
         }
         _ => format!("0x{:02X}", vk),
-    }
-}
-
-/// Convert a Slint key event text to Win32 modifier flags + vk code.
-/// Returns None if the key combo is invalid (no modifier, or only modifiers).
-pub fn parse_hotkey_from_event(mods: u32, vk: u32) -> Option<(u32, u32)> {
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
-    // Must have at least one modifier
-    let real_mods = mods & (MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN);
-    if real_mods == 0 {
-        return None;
-    }
-    // VK must not be a modifier itself
-    if vk == VK_SHIFT as u32
-        || vk == VK_CONTROL as u32
-        || vk == VK_MENU as u32
-        || vk == VK_LWIN as u32
-        || vk == VK_RWIN as u32
-    {
-        return None;
-    }
-    Some((real_mods | MOD_NOREPEAT, vk))
-}
-
-/// Convert a Slint key event text string to a Win32 virtual key code.
-pub fn slint_key_to_vk(text: &str) -> u32 {
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::*;
-
-    match text {
-        " " => VK_SPACE as u32,
-        "\n" | "\r" => VK_RETURN as u32,
-        "\t" => VK_TAB as u32,
-        // Arrow keys (Slint uses F700-F703)
-        "\u{F700}" => VK_UP as u32,
-        "\u{F701}" => VK_DOWN as u32,
-        "\u{F702}" => VK_LEFT as u32,
-        "\u{F703}" => VK_RIGHT as u32,
-        // Function keys
-        "\u{F704}" => VK_F1 as u32,
-        "\u{F705}" => VK_F2 as u32,
-        "\u{F706}" => VK_F3 as u32,
-        "\u{F707}" => VK_F4 as u32,
-        "\u{F708}" => VK_F5 as u32,
-        "\u{F709}" => VK_F6 as u32,
-        "\u{F70A}" => VK_F7 as u32,
-        "\u{F70B}" => VK_F8 as u32,
-        "\u{F70C}" => VK_F9 as u32,
-        "\u{F70D}" => VK_F10 as u32,
-        "\u{F70E}" => VK_F11 as u32,
-        "\u{F70F}" => VK_F12 as u32,
-        // Delete/Insert/Home/End/Page
-        "\u{F728}" => VK_DELETE as u32,
-        "\u{F729}" => VK_HOME as u32,
-        "\u{F72B}" => VK_END as u32,
-        "\u{F72C}" => VK_PRIOR as u32,
-        "\u{F72D}" => VK_NEXT as u32,
-        // Single character — map A-Z and 0-9 to VK codes
-        s if s.len() == 1 => {
-            let c = s.chars().next().unwrap();
-            if c.is_ascii_alphabetic() {
-                c.to_ascii_uppercase() as u32
-            } else if c.is_ascii_digit() {
-                c as u32
-            } else {
-                // For other printable chars, try VkKeyScanW
-                unsafe {
-                    let result = windows_sys::Win32::UI::Input::KeyboardAndMouse::VkKeyScanW(c as u16);
-                    let vk = (result & 0xFF) as u32;
-                    if vk != 0xFF { vk } else { 0 }
-                }
-            }
-        }
-        _ => 0,
     }
 }
