@@ -1,20 +1,20 @@
 <template>
   <div class="plugin-renderer">
-    <component
-      :is="pluginComponentMap[pluginId]"
-      v-if="pluginComponentMap[pluginId]"
-      ref="pluginRef"
-      :context="pluginContext"
+    <iframe
+      v-if="pluginId"
+      ref="iframeRef"
+      class="plugin-iframe"
+      sandbox="allow-scripts allow-forms"
+      referrerpolicy="no-referrer"
+      :title="`Plugin ${pluginId}`"
     />
-    <div v-else class="plugin-loading">Plugin not found: {{ pluginId }}</div>
+    <div v-else-if="error" class="plugin-error">{{ error }}</div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useTauri } from '../composables/useTauri'
-import { pluginComponentMap } from '../composables/usePluginComponents'
-import type { PluginContext } from '../types'
+import { ref, watch } from 'vue'
+import { usePluginIframe } from '../composables/usePluginIframe'
 
 interface Props {
   pluginId: string
@@ -22,50 +22,50 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const { invoke, getCurrentWindow } = useTauri()
-const pluginRef = ref<any>(null)
 
-const pluginContext = computed<PluginContext>(() => ({
-  query: props.query,
-  invoke: async (command: string, args: Record<string, unknown>) => {
-    return invoke('plugin_invoke', {
-      pluginId: props.pluginId,
-      command,
-      args: JSON.stringify(args),
-    })
-  },
-  openFile: async (path: string) => {
-    await invoke('execute_result', { subtitle: path })
-  },
-  hideWindow: async () => {
-    const appWindow = getCurrentWindow()
-    await appWindow.hide()
-  },
-  theme: {
-    mode: 'dark',
-    vars: {
-      '--bg-primary': '#1e1e22',
-      '--bg-secondary': '#2a2a30',
-      '--text-primary': '#e0e0e0',
-      '--accent': '#4a90d9',
-    },
-  },
-  config: {
-    hotkey: 'Ctrl+Alt+Space',
-  },
-}))
+const iframeRef = ref<HTMLIFrameElement | null>(null)
+const pluginIdRef = ref<string | null>(props.pluginId)
 
-function doSearch(query: string) {
-  if (pluginRef.value?.onSearch) {
-    pluginRef.value.onSearch(query)
+const { ready, error, load, doSearch, onKeyDown } = usePluginIframe({
+  iframeRef,
+  pluginId: pluginIdRef,
+})
+
+watch(() => props.pluginId, (id) => {
+  pluginIdRef.value = id
+  if (id) {
+    load(id, props.query)
   }
-}
+}, { immediate: true })
 
-function onKeyDown(e: KeyboardEvent) {
-  if (pluginRef.value?.onKeyDown) {
-    pluginRef.value.onKeyDown(e)
-  }
-}
+watch(() => props.query, (q) => {
+  if (ready.value) doSearch(q)
+})
 
 defineExpose({ doSearch, onKeyDown })
 </script>
+
+<style scoped>
+.plugin-renderer {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.plugin-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+
+.plugin-error {
+  padding: 16px;
+  color: #ff6b6b;
+  font-size: 13px;
+  text-align: center;
+}
+</style>

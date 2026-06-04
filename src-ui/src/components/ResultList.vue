@@ -23,7 +23,7 @@ interface Props {
   selectedIndex: number
 }
 
-const props = defineProps<Props>()
+defineProps<Props>()
 const emit = defineEmits<{
   select: [index: number]
   execute: [index: number]

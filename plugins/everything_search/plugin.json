@@ -3,7 +3,7 @@
   "name": "Everything 文件搜索",
   "version": "1.0.0",
   "dll": "everything_search.dll",
-  "vue_component": "renderer/dist/index.js",
+  "renderer": "renderer/dist/index.html",
   "commands": [
     { "name": "search", "params": ["query"], "description": "搜索文件" }
   ]

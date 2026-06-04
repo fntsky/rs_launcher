@@ -1,23 +1,21 @@
-<div class="hello-plugin">
-  <h3>Hello Plugin</h3>
-  <p id="hello-msg">Click the button to greet!</p>
-  <input type="text" id="hello-name" placeholder="Enter name..." />
-  <button id="hello-btn" onclick="helloGreet()">Greet</button>
-</div>
-
-<script>
-async function helloGreet() {
-  const name = document.getElementById('hello-name').value || 'World';
-  try {
-    const result = await window.__TAURI__.core.invoke('plugin_invoke', {
-      pluginId: 'hello_plugin',
-      command: 'greet',
-      args: JSON.stringify({ name: name })
-    });
-    const data = JSON.parse(result);
-    document.getElementById('hello-msg').textContent = data.message || data.error || 'No response';
-  } catch (e) {
-    document.getElementById('hello-msg').textContent = 'Error: ' + e;
-  }
-}
-</script>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hello Plugin</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="hello-plugin">
+    <h3>Hello Plugin</h3>
+    <p id="hello-msg" class="msg">输入名字打招呼</p>
+    <div class="row">
+      <input type="text" id="hello-name" placeholder="Enter name..." autocomplete="off" spellcheck="false">
+      <button id="hello-btn" type="button">Greet</button>
+    </div>
+    <p class="hint" id="hello-version"></p>
+  </div>
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -8,7 +8,9 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"],
     "lib": ["ES2020", "DOM", "DOM.Iterable"]
   },
-  "include": ["*.ts", "*.vue", "*.d.ts"]
+  "include": ["*.ts", "*.vue", "*.d.ts", "main.ts"]
 }

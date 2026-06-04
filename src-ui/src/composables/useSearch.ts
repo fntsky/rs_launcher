@@ -1,4 +1,3 @@
-import { ref } from 'vue'
 import { useTauri } from './useTauri'
 import type { SearchResult } from '../types'
 

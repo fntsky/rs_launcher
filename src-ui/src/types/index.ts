@@ -8,31 +8,19 @@ export interface SearchResult {
   template: string
 }
 
-export interface PluginContext {
-  query: string
-  invoke: (command: string, args: Record<string, unknown>) => Promise<unknown>
-  openFile: (path: string) => Promise<void>
-  hideWindow: () => Promise<void>
-  theme: {
-    mode: 'dark' | 'light'
-    vars: Record<string, string>
-  }
-  config: {
-    hotkey: string
-    [key: string]: unknown
-  }
+export interface RSTheme {
+  mode: 'dark' | 'light'
+  vars: Record<string, string>
+  name?: string
 }
 
-export interface PluginConfig {
-  id: string
-  name: string
+export interface PluginIframeInit {
+  plugin_id: string
+  sdk_js: string
+  base_dir: string
+  renderer_path: string
+  html_content: string
+  query: string
+  config: Record<string, unknown>
   version: string
-  dll: string
-  vue_component?: string
-  renderer?: string
-  commands: Array<{
-    name: string
-    params: string[]
-    description: string
-  }>
 }

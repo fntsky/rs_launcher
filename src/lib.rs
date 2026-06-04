@@ -4,6 +4,9 @@ mod plugins;
 mod search;
 mod icon;
 
+const RS_SDK_JS: &str = include_str!("../src-ui/src/sdk/rs-sdk.js");
+const IFRAME_PROTOCOL_VERSION: &str = "iframe-renderer/1";
+
 use tauri::LogicalPosition;
 
 fn center_window_top(window: &tauri::WebviewWindow) {
@@ -57,6 +60,18 @@ impl From<SearchResult> for SearchResultDTO {
 #[derive(Serialize)]
 pub struct ConfigDTO {
     pub hotkey_display: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct PluginIframeInit {
+    pub plugin_id: String,
+    pub sdk_js: String,
+    pub base_dir: String,
+    pub renderer_path: String,
+    pub html_content: String,
+    pub query: String,
+    pub config: serde_json::Value,
+    pub version: String,
 }
 
 #[tauri::command]
@@ -117,112 +132,33 @@ fn plugin_invoke(plugin_id: String, command: String, args: String, state: State<
     }
 }
 
-#[derive(Serialize, Clone)]
-pub struct RendererInfo {
-    pub plugin_id: String,
-    pub name: String,
-    pub html: String,
-    pub css: String,
-    pub js: String,
-}
-
-#[derive(Serialize, Clone)]
-pub struct VueComponentInfo {
-    pub plugin_id: String,
-    pub name: String,
-    pub js: String,
-}
-
-#[derive(Serialize, Clone)]
-pub struct PluginCssInfo {
-    pub plugin_id: String,
-    pub css: String,
-}
-
 #[tauri::command]
-fn get_plugin_renderers(state: State<'_, AppState>) -> Vec<RendererInfo> {
-    let mut renderers = Vec::new();
-    for plugin in state.registry.plugins() {
-        if let Some(dynamic) = plugin.as_dynamic() {
-            if dynamic.has_renderer() {
-                if let Some(html_path) = dynamic.renderer_path() {
-                    let html_content = std::fs::read_to_string(&html_path).unwrap_or_default();
-                    let css_path = html_path.with_extension("css");
-                    let css_content = if css_path.exists() {
-                        std::fs::read_to_string(&css_path).unwrap_or_default()
-                    } else {
-                        String::new()
-                    };
-                    let js_path = html_path.parent().map(|p| p.join("app.js")).filter(|p| p.exists());
-                    let js_content = js_path.map(|p| std::fs::read_to_string(p).unwrap_or_default()).unwrap_or_default();
-                    renderers.push(RendererInfo {
-                        plugin_id: plugin.id().to_string(),
-                        name: plugin.name().to_string(),
-                        html: html_content,
-                        css: css_content,
-                        js: js_content,
-                    });
-                }
-            }
-        }
-    }
-    renderers
-}
-
-#[tauri::command]
-fn get_plugin_renderer(plugin_id: String, state: State<'_, AppState>) -> Option<RendererInfo> {
+fn get_plugin_iframe_init(
+    plugin_id: String,
+    query: String,
+    state: State<'_, AppState>,
+) -> Option<PluginIframeInit> {
     let plugin = state.registry.find_by_id(&plugin_id)?;
     let dynamic = plugin.as_dynamic()?;
     if !dynamic.has_renderer() {
         return None;
     }
     let html_path = dynamic.renderer_path()?;
+    if !html_path.exists() {
+        return None;
+    }
     let html_content = std::fs::read_to_string(&html_path).unwrap_or_default();
-    let _js_path = html_path.parent().map(|p| p.join("app.js")).filter(|p| p.exists());
-    let css_path = html_path.with_extension("css");
-    let css_content = if css_path.exists() {
-        std::fs::read_to_string(&css_path).unwrap_or_default()
-    } else {
-        String::new()
-    };
-    let js_path = html_path.parent().map(|p| p.join("app.js")).filter(|p| p.exists());
-    let js_content = js_path.map(|p| std::fs::read_to_string(p).unwrap_or_default()).unwrap_or_default();
-    Some(RendererInfo {
-        plugin_id: plugin.id().to_string(),
-        name: plugin.name().to_string(),
-        html: html_content,
-        css: css_content,
-        js: js_content,
-    })
-}
-
-#[tauri::command]
-fn get_plugin_vue_component(plugin_id: String, state: State<'_, AppState>) -> Option<VueComponentInfo> {
-    let plugin = state.registry.find_by_id(&plugin_id)?;
-    let dynamic = plugin.as_dynamic()?;
-    let js_path = dynamic.vue_component_path()?;
-    let js_content = std::fs::read_to_string(&js_path).unwrap_or_default();
-    Some(VueComponentInfo {
-        plugin_id: plugin.id().to_string(),
-        name: plugin.name().to_string(),
-        js: js_content,
-    })
-}
-
-#[tauri::command]
-fn get_plugin_css(plugin_id: String, state: State<'_, AppState>) -> Option<PluginCssInfo> {
-    let plugin = state.registry.find_by_id(&plugin_id)?;
-    let dynamic = plugin.as_dynamic()?;
-    let js_path = dynamic.vue_component_path()?;
-    let css_path = js_path.parent()?.join("style.css");
-    let css_content = if css_path.exists() {
-        std::fs::read_to_string(&css_path).unwrap_or_default()
-    } else {
-        String::new()
-    };
-    Some(PluginCssInfo {
-        plugin_id: plugin.id().to_string(),
-        css: css_content,
+    let base_dir = dynamic.plugin_dir().to_string_lossy().to_string();
+    let config = serde_json::json!({ "hotkey": "Ctrl+Alt+Space" });
+    Some(PluginIframeInit {
+        plugin_id,
+        sdk_js: RS_SDK_JS.to_string(),
+        base_dir,
+        renderer_path: html_path.to_string_lossy().to_string(),
+        html_content,
+        query,
+        config,
+        version: IFRAME_PROTOCOL_VERSION.to_string(),
     })
 }
 
@@ -273,10 +209,7 @@ pub fn run() {
             get_config,
             save_hotkey,
             plugin_invoke,
-            get_plugin_renderers,
-            get_plugin_renderer,
-            get_plugin_vue_component,
-            get_plugin_css,
+            get_plugin_iframe_init,
         ])
         .setup(|app| {
             // Register global shortcut

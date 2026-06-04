@@ -4,7 +4,7 @@
       @search="onSearch" />
     <ResultList v-if="!activePlugin && results.length > 0" :results="results" :selected-index="selectedIndex"
       @select="selectResult" @execute="executeResult" />
-    <PluginRenderer v-if="activePlugin" ref="pluginRendererRef" :plugin-id="activePlugin" :query="query" @back="deactivatePlugin" />
+    <PluginRenderer v-if="activePlugin" ref="pluginRendererRef" :plugin-id="activePlugin" :query="query" />
     <HintBar v-if="!activePlugin && results.length === 0 && !query" />
     <SettingsModal v-if="settingsOpen" :hotkey="hotkey" @close="closeSettings" @save-hotkey="saveHotkey" />
   </div>
@@ -20,11 +20,13 @@ import SettingsModal from './components/SettingsModal.vue'
 import { useTauri } from './composables/useTauri'
 import { useSearch } from './composables/useSearch'
 import { useWindow } from './composables/useWindow'
+import { useTheme } from './composables/useTheme'
 import type { SearchResult } from './types'
 
 const { invoke } = useTauri()
 const { search } = useSearch()
-const { setWindowSize, setPluginWindowSize, hideWindow } = useWindow()
+const { setWindowSize, setPluginWindowSize, setPluginSize, hideWindow } = useWindow()
+useTheme()
 
 const query = ref('')
 const results = ref<SearchResult[]>([])
@@ -86,6 +88,21 @@ async function saveHotkey(newHotkey: string) {
   await invoke('save_hotkey', { shortcutStr: newHotkey })
 }
 
+const PLUGIN_FORWARD_KEYS = new Set([
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'Enter', 'Tab',
+  'PageUp', 'PageDown', 'Home', 'End',
+  'Insert',
+  'F1', 'F2', 'F3', 'F4', 'F5', 'F6',
+  'F7', 'F8', 'F9', 'F10', 'F11', 'F12',
+])
+
+function isPluginKey(e: KeyboardEvent): boolean {
+  if (PLUGIN_FORWARD_KEYS.has(e.key)) return true
+  if (e.ctrlKey || e.metaKey || e.altKey) return true
+  return false
+}
+
 function handleKeydown(e: KeyboardEvent) {
   // ESC: close plugin or hide window
   if (e.key === 'Escape') {
@@ -106,9 +123,12 @@ function handleKeydown(e: KeyboardEvent) {
     return
   }
 
-  // Forward keyboard events to active plugin
+  // Forward non-text keys to active plugin (let printable chars and Backspace/Delete pass through to the input)
   if (activePlugin.value && pluginRendererRef.value) {
-    pluginRendererRef.value.onKeyDown(e)
+    if (isPluginKey(e)) {
+      e.preventDefault()
+      pluginRendererRef.value.onKeyDown(e)
+    }
     return
   }
 
@@ -136,9 +156,11 @@ function handleKeydown(e: KeyboardEvent) {
 
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('rs-plugin-back', onPluginBack as EventListener)
+  window.addEventListener('rs-plugin-resize', onPluginResize as EventListener)
 
   try {
-    const config = await invoke('get_config')
+    const config = await invoke<{ hotkey_display: string }>('get_config')
     hotkey.value = config.hotkey_display
   } catch (e) {
     console.error('Failed to load config:', e)
@@ -150,7 +172,21 @@ onMounted(async () => {
   }
 })
 
+function onPluginBack(e: CustomEvent) {
+  if (e.detail?.pluginId === activePlugin.value) {
+    deactivatePlugin()
+  }
+}
+
+function onPluginResize(e: CustomEvent) {
+  const d = e.detail
+  if (!d) return
+  setPluginSize(d.width, d.height)
+}
+
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('rs-plugin-back', onPluginBack as EventListener)
+  window.removeEventListener('rs-plugin-resize', onPluginResize as EventListener)
 })
 </script>

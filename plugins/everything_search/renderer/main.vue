@@ -6,7 +6,7 @@
           {{ loading ? '搜索中...' : '输入关键词搜索文件和文件夹' }}
         </div>
         <div v-for="(result, index) in results" :key="index" class="ev-item"
-          :class="{ selected: index === selectedIndex }" @click="selectedIndex = index; openResult(index)">
+          :class="{ selected: index === selectedIndex }" @click="onItemClick(index)">
           <img v-if="result.icon" class="ev-icon-img" :src="result.icon" />
           <span v-else class="ev-icon">{{ result.is_folder ? '📁' : '📄' }}</span>
           <div class="ev-info">
@@ -25,26 +25,27 @@
       <div v-else-if="previewVisible && !previewIsImage" class="ev-preview ev-preview-text" v-html="previewContent">
       </div>
       <div class="ev-file-info">
-        <div v-if="results[selectedIndex]?.size">
+        <div v-if="currentResult?.size">
           <div class="ev-info-label">大小</div>
-          <div class="ev-info-value">{{ results[selectedIndex].size }}</div>
+          <div class="ev-info-value">{{ currentResult.size }}</div>
         </div>
-        <div v-if="results[selectedIndex]">
+        <div v-if="currentResult">
           <div class="ev-info-label">类型</div>
-          <div class="ev-info-value">{{ results[selectedIndex].is_folder ? '文件夹' : '文件' }}</div>
+          <div class="ev-info-value">{{ currentResult.is_folder ? '文件夹' : '文件' }}</div>
         </div>
       </div>
     </div>
-    <div v-if="results[selectedIndex]" class="ev-path-bar">
-      {{ results[selectedIndex].subtitle }}
+    <div v-if="currentResult" class="ev-path-bar">
+      {{ currentResult.subtitle }}
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import hljs from 'highlight.js/lib/common'
 import 'highlight.js/styles/github-dark.css'
+import type { RSKeyEvent } from './rs-sdk'
 
 const TEXT_EXTENSIONS = new Set([
   'txt', 'md', 'json', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'scss', 'less',
@@ -52,11 +53,11 @@ const TEXT_EXTENSIONS = new Set([
   'kt', 'scala', 'sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd',
   'xml', 'yaml', 'yml', 'toml', 'ini', 'conf', 'cfg', 'log',
   'sql', 'graphql', 'vue', 'svelte', 'dart', 'lua', 'r', 'pl', 'pm',
-  'dockerfile', 'gitignore', 'env', 'properties'
+  'dockerfile', 'gitignore', 'env', 'properties',
 ])
 
 const IMAGE_EXTENSIONS = new Set([
-  'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif'
+  'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif',
 ])
 
 function getFileExt(filename: string): string {
@@ -97,7 +98,6 @@ function highlightCode(code: string, filename: string): string {
     const result = lang ? hljs.highlight(code, { language: lang }) : hljs.highlightAuto(code)
     return result.value
   } catch {
-    // Fallback: escape HTML
     return code
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   }
@@ -111,17 +111,6 @@ interface SearchResult {
   size?: string
 }
 
-interface Props {
-  context: {
-    query: string
-    invoke: (command: string, args: Record<string, unknown>) => Promise<unknown>
-    openFile: (path: string) => Promise<void>
-    hideWindow: () => Promise<void>
-  }
-}
-
-const props = defineProps<Props>()
-
 const query = ref('')
 const results = ref<SearchResult[]>([])
 const selectedIndex = ref(-1)
@@ -131,23 +120,22 @@ const previewImageUrl = ref('')
 const previewVisible = ref(false)
 const previewIsImage = ref(false)
 const loading = ref(false)
-const debug = ref('init')
-const searchCount = ref(0)
-const mountCount = ref(0)
+let searchCount = 0
 
-async function search() {
+const currentResult = computed(() => results.value[selectedIndex.value] || null)
+
+async function runSearch() {
   if (!query.value.trim()) {
     results.value = []
     selectedIndex.value = -1
     return
   }
-  const id = ++searchCount.value
-  debug.value = `[#${id}] loading...`
+  const id = ++searchCount
   loading.value = true
   try {
-    const result = await props.context.invoke('search', { query: query.value }) as string
-    const data = JSON.parse(result)
-    debug.value = `[#${id}] done, error=${data.error}, count=${data.results?.length ?? -1}`
+    const result = await window.RS.invoke('search', { query: query.value })
+    const data = typeof result === 'string' ? JSON.parse(result) : result
+    if (id !== searchCount) return
     if (data.error) {
       status.value = data.error
       results.value = []
@@ -156,31 +144,31 @@ async function search() {
       results.value = data.results || []
     }
     selectedIndex.value = results.value.length > 0 ? 0 : -1
-  } catch (e) {
-    status.value = '搜索出错: ' + e
-    debug.value = `[#${id}] err: ${e}`
+  } catch (e: any) {
+    if (id !== searchCount) return
+    status.value = '搜索出错: ' + (e?.message || e)
     results.value = []
   } finally {
-    loading.value = false
+    if (id === searchCount) loading.value = false
   }
 }
 
-function onKeyDown(e: KeyboardEvent) {
+function handleKeyDown(e: any) {
   if (e.key === 'ArrowDown') {
-    e.preventDefault()
     if (results.value.length > 0) {
+      e.preventDefault?.()
       selectedIndex.value = Math.min(selectedIndex.value + 1, results.value.length - 1)
       updatePreview()
     }
   } else if (e.key === 'ArrowUp') {
-    e.preventDefault()
     if (results.value.length > 0) {
+      e.preventDefault?.()
       selectedIndex.value = Math.max(selectedIndex.value - 1, 0)
       updatePreview()
     }
   } else if (e.key === 'Enter') {
-    e.preventDefault()
     if (selectedIndex.value >= 0) {
+      e.preventDefault?.()
       openResult(selectedIndex.value)
     }
   }
@@ -195,8 +183,8 @@ async function updatePreview() {
 
   if (isImageFile(result.subtitle)) {
     try {
-      const res = await props.context.invoke('read_image', { path: result.subtitle }) as string
-      const data = JSON.parse(res)
+      const res = await window.RS.invoke('read_image', { path: result.subtitle })
+      const data = typeof res === 'string' ? JSON.parse(res) : res
       if (data.error) {
         previewVisible.value = false
       } else {
@@ -204,7 +192,7 @@ async function updatePreview() {
         previewIsImage.value = true
         previewVisible.value = true
       }
-    } catch (e) {
+    } catch {
       previewVisible.value = false
     }
     return
@@ -218,8 +206,8 @@ async function updatePreview() {
   }
 
   try {
-    const res = await props.context.invoke('read_file', { path: result.subtitle }) as string
-    const data = JSON.parse(res)
+    const res = await window.RS.invoke('read_file', { path: result.subtitle })
+    const data = typeof res === 'string' ? JSON.parse(res) : res
     if (data.error) {
       previewVisible.value = false
     } else {
@@ -227,7 +215,7 @@ async function updatePreview() {
       previewIsImage.value = false
       previewVisible.value = true
     }
-  } catch (e) {
+  } catch {
     previewVisible.value = false
   }
 }
@@ -235,45 +223,65 @@ async function updatePreview() {
 async function openResult(index: number) {
   const result = results.value[index]
   if (!result) return
-  await props.context.openFile(result.subtitle)
-  await props.context.hideWindow()
+  await window.RS.openFile(result.subtitle)
+  await window.RS.hideWindow()
 }
 
-// Expose search method to parent
-function onSearch(newQuery: string) {
-  query.value = newQuery
-  results.value = []
-  selectedIndex.value = -1
-  search()
-}
-
-defineExpose({ onSearch, onKeyDown })
-
-// Sync query from parent context prop
-watch(() => props.context.query, (newQuery) => {
-  console.log('Context query changed:', newQuery)
-  if (newQuery !== query.value) {
-    query.value = newQuery
-  }
-})
-
-// Auto-update preview when selection changes
-watch(() => selectedIndex.value, () => {
+function onItemClick(index: number) {
+  selectedIndex.value = index
   updatePreview()
+}
+
+watch(() => selectedIndex.value, () => updatePreview())
+
+let unsubQuery: (() => void) | null = null
+let unsubKey: (() => void) | null = null
+let unsubCtx: (() => void) | null = null
+
+onMounted(async () => {
+  await window.RS.ready
+
+  unsubQuery = window.RS.on('query-change', (q: string) => {
+    if (q === query.value) return
+    query.value = q
+    results.value = []
+    selectedIndex.value = -1
+    runSearch()
+  })
+
+  unsubKey = window.RS.on('keydown', (k: RSKeyEvent) => handleKeyDown(k))
+
+  unsubCtx = window.RS.on('context-change', () => {
+    const initialQuery = window.RS.context?.query
+    if (initialQuery && initialQuery !== query.value) {
+      query.value = initialQuery
+      runSearch()
+    }
+  })
+
+  const initialQuery = window.RS.context?.query
+  if (initialQuery) {
+    query.value = initialQuery
+    runSearch()
+  }
 })
 
-// Trigger initial search when plugin activates
-onMounted(() => {
-  mountCount.value++
-  debug.value = `mount#${mountCount.value}:` + (props.context.query || 'empty')
-  if (props.context.query) {
-    query.value = props.context.query
-    search()
-  }
+onUnmounted(() => {
+  unsubQuery?.()
+  unsubKey?.()
+  unsubCtx?.()
 })
 </script>
 
 <style>
+html, body, #app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
 .everything-search {
   display: grid;
   grid-template-columns: 2fr 3fr;
@@ -290,11 +298,13 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
 .ev-results {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 4px 0;
 }
@@ -302,17 +312,15 @@ onMounted(() => {
 .ev-path-bar {
   grid-area: path;
   padding: 8px 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--divider, #3a3a42);
   font-size: 11px;
-  color: #888;
+  color: var(--text-primary, #e0e0e0) !important;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.ev-path-bar.hidden {
-  display: none;
+  background: var(--bg-secondary, #1e1e22) !important;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  letter-spacing: 0.2px;
 }
 
 .ev-sidebar {
@@ -320,11 +328,13 @@ onMounted(() => {
   border-left: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
+  min-height: 0;
   overflow-y: auto;
   padding: 8px 0;
 }
 
 .ev-status {
+  flex-shrink: 0;
   padding: 12px 16px;
   color: #ff6b6b;
   font-size: 13px;
@@ -333,13 +343,9 @@ onMounted(() => {
   margin: 4px 8px;
 }
 
-.ev-status.hidden {
-  display: none;
-}
-
 .ev-empty {
   padding: 24px 16px;
-  color: #888;
+  color: var(--text-hint);
   font-size: 13px;
   text-align: center;
 }
@@ -352,15 +358,11 @@ onMounted(() => {
   cursor: pointer;
   border-radius: 4px;
   transition: background 0.15s;
+  color: var(--text-primary, #e0e0e0);
 }
 
-.ev-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.ev-item.selected {
-  background: rgba(255, 255, 255, 0.1);
-}
+.ev-item:hover { background: var(--bg-hover); }
+.ev-item.selected { background: var(--bg-selected); }
 
 .ev-icon {
   font-size: 16px;
@@ -385,22 +387,18 @@ onMounted(() => {
 .ev-title {
   font-size: 12px;
   font-weight: 500;
+  color: var(--text-primary, #e0e0e0);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Preview panel */
 .ev-preview {
-  flex: 1;
+  flex-shrink: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
   margin: 4px 8px;
   border-radius: 6px;
-}
-
-.ev-preview.hidden {
-  display: none;
 }
 
 .ev-preview-text {
@@ -408,8 +406,8 @@ onMounted(() => {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.5;
-  color: #ccc;
-  background: rgba(0, 0, 0, 0.15);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -418,8 +416,9 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--bg-secondary);
   padding: 8px;
+  min-height: 200px;
 }
 
 .ev-image-wrap {
@@ -427,46 +426,63 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   width: 100%;
-  height: 100%;
 }
 
 .ev-image-img {
   max-width: 100%;
-  max-height: 100%;
+  max-height: 400px;
   object-fit: contain;
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-
-.ev-preview .hl-function {
-  color: #61afef;
-}
-
-.ev-preview .hl-type {
-  color: #e5c07b;
-}
-
 .ev-file-info {
+  flex-shrink: 0;
   padding: 12px 16px;
   font-size: 13px;
 }
 
 .ev-info-label {
   font-size: 11px;
-  color: #666;
+  color: var(--text-hint);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 4px;
 }
 
 .ev-info-value {
-  color: #ccc;
+  color: var(--text-primary);
   margin-bottom: 12px;
   word-break: break-word;
 }
 
-.ev-info-value:last-child {
-  margin-bottom: 0;
+.ev-info-value:last-child { margin-bottom: 0; }
+
+.ev-results::-webkit-scrollbar,
+.ev-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ev-results::-webkit-scrollbar-track,
+.ev-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ev-results::-webkit-scrollbar-thumb,
+.ev-sidebar::-webkit-scrollbar-thumb {
+  background: var(--divider);
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+
+.ev-results::-webkit-scrollbar-thumb:hover,
+.ev-sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-hint);
+}
+
+.ev-results,
+.ev-sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--divider) transparent;
 }
 </style>

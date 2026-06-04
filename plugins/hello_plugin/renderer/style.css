@@ -1,41 +1,67 @@
-#plugin-renderer-hello_plugin .hello-plugin {
-  padding: 12px;
-}
-
-#plugin-renderer-hello_plugin h3 {
-  font-size: 14px;
-  margin-bottom: 8px;
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+  background: transparent;
   color: var(--text-primary);
 }
 
-#plugin-renderer-hello_plugin p {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
+.hello-plugin {
+  padding: 16px;
 }
 
-#plugin-renderer-hello_plugin input {
+.hello-plugin h3 {
+  font-size: 14px;
+  margin: 0 0 12px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.msg {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+  min-height: 16px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+input[type="text"] {
+  flex: 1;
   background: var(--bg-secondary);
-  border: none;
-  border-radius: 4px;
+  border: 1px solid var(--divider);
+  border-radius: 6px;
   padding: 6px 10px;
   color: var(--text-primary);
   font-size: 13px;
-  width: 180px;
-  margin-right: 8px;
   outline: none;
+  font-family: inherit;
 }
 
-#plugin-renderer-hello_plugin button {
+input[type="text"]:focus {
+  border-color: var(--accent);
+}
+
+button {
   background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   padding: 6px 14px;
   font-size: 13px;
   cursor: pointer;
+  font-family: inherit;
 }
 
-#plugin-renderer-hello_plugin button:hover {
-  opacity: 0.85;
+button:hover { opacity: 0.85; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.hint {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--text-hint);
 }
