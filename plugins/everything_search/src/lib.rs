@@ -267,15 +267,18 @@ fn search_everything(query: &str) -> String {
     }
 
     use everything_ipc::wm::{EverythingClient, RequestFlags, Sort};
+    use std::time::Instant;
 
     let everything = match EverythingClient::new() {
         Ok(e) => e,
         Err(_) => return r#"{"results":[],"error":"Everything 服务未运行，请先启动 Everything"}"#.to_string(),
     };
 
+    let start = Instant::now();
+
     let list = everything
         .query_wait(query)
-        .request_flags(RequestFlags::FileName | RequestFlags::Path | RequestFlags::Size | RequestFlags::Attributes)
+        .request_flags(RequestFlags::FileName | RequestFlags::Path | RequestFlags::Size)
         .sort(Sort::NameAscending)
         .max_results(100)
         .call();
@@ -299,11 +302,12 @@ fn search_everything(query: &str) -> String {
 
                 let size_val = item.get_size(RequestFlags::Size).unwrap_or(0);
 
-                // Check if folder via attributes (FILE_ATTRIBUTE_DIRECTORY = 0x10)
-                let attrs = item.get_u32(RequestFlags::Attributes).unwrap_or(0);
-                let is_folder = (attrs & 0x10) != 0;
+                // Determine folder via filesystem metadata (more reliable than Everything's attributes)
+                let is_folder = std::fs::metadata(&full_path)
+                    .map(|m| m.is_dir())
+                    .unwrap_or(false);
 
-                                let icon = extract_file_icon(&full_path);
+                let icon = extract_file_icon(&full_path);
 
                 let size_str = if is_folder {
                     String::new()
@@ -320,6 +324,9 @@ fn search_everything(query: &str) -> String {
                 }));
             }
 
+            let elapsed = start.elapsed();
+            eprintln!("[EVERYTHING] 查询 \"{}\" 找到 {} 个结果 ({}ms)", query, results.len(), elapsed.as_millis());
+
             serde_json::json!({
                 "results": results,
                 "error": null,
@@ -327,6 +334,88 @@ fn search_everything(query: &str) -> String {
             .to_string()
         }
     }
+}
+
+fn read_image_as_data_url(path: &str) -> String {
+    use std::io::Read;
+
+    let path_obj = std::path::Path::new(path);
+    if !path_obj.exists() {
+        return r#"{"url":null,"error":"file not found"}"#.to_string();
+    }
+
+    let metadata = match std::fs::metadata(path_obj) {
+        Ok(m) => m,
+        Err(e) => return format!(r#"{{"url":null,"error":"{}"}}"#, e.to_string()),
+    };
+
+    // 20MB limit for image preview
+    if metadata.len() > 20 * 1024 * 1024 {
+        return r#"{"url":null,"error":"file too large for image preview (>20MB)"}"#.to_string();
+    }
+
+    let mut file = match std::fs::File::open(path_obj) {
+        Ok(f) => f,
+        Err(e) => return format!(r#"{{"url":null,"error":"{}"}}"#, e.to_string()),
+    };
+
+    let mut buf = Vec::new();
+    if let Err(e) = file.read_to_end(&mut buf) {
+        return format!(r#"{{"url":null,"error":"{}"}}"#, e.to_string());
+    }
+
+    // Determine MIME type from extension
+    let mime = match path_obj.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).as_deref() {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("bmp") => "image/bmp",
+        Some("webp") => "image/webp",
+        Some("svg") => "image/svg+xml",
+        Some("ico") => "image/x-icon",
+        Some("tiff") | Some("tif") => "image/tiff",
+        _ => "image/png",
+    };
+
+    let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &buf);
+
+    serde_json::json!({
+        "url": format!("data:{};base64,{}", mime, b64),
+        "error": null,
+    }).to_string()
+}
+
+fn read_file_content(path: &str) -> String {
+    use std::io::Read;
+
+    let path_obj = std::path::Path::new(path);
+    if !path_obj.exists() {
+        return r#"{"content":null,"error":"file not found"}"#.to_string();
+    }
+
+    let metadata = match std::fs::metadata(path_obj) {
+        Ok(m) => m,
+        Err(e) => return format!(r#"{{"content":null,"error":"{}"}}"#, e.to_string()),
+    };
+
+    if metadata.len() > 100 * 1024 {
+        return r#"{"content":null,"error":"file too large for preview (>100KB)"}"#.to_string();
+    }
+
+    let mut file = match std::fs::File::open(path_obj) {
+        Ok(f) => f,
+        Err(e) => return format!(r#"{{"content":null,"error":"{}"}}"#, e.to_string()),
+    };
+
+    let mut content = String::new();
+    if let Err(e) = file.read_to_string(&mut content) {
+        return format!(r#"{{"content":null,"error":"{}"}}"#, e.to_string());
+    }
+
+    serde_json::json!({
+        "content": content,
+        "error": null,
+    }).to_string()
 }
 
 fn format_size(bytes: u64) -> String {
@@ -413,6 +502,20 @@ pub extern "C" fn plugin_invoke(
                 .and_then(|v| v["query"].as_str().map(|s| s.to_string()))
                 .unwrap_or_default();
             search_everything(&query)
+        }
+        "read_image" => {
+            let path = serde_json::from_str::<serde_json::Value>(args_str)
+                .ok()
+                .and_then(|v| v["path"].as_str().map(|s| s.to_string()))
+                .unwrap_or_default();
+            read_image_as_data_url(&path)
+        }
+        "read_file" => {
+            let path = serde_json::from_str::<serde_json::Value>(args_str)
+                .ok()
+                .and_then(|v| v["path"].as_str().map(|s| s.to_string()))
+                .unwrap_or_default();
+            read_file_content(&path)
         }
         _ => r#"{"error":"unknown command"}"#.to_string(),
     };
