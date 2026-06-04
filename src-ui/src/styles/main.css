@@ -1,5 +1,5 @@
 /* ============================================================
-   RS Launcher — Dark Theme Styles
+   RS Launcher — Global Styles (Vue version)
    ============================================================ */
 
 :root {
@@ -46,20 +46,7 @@ html, body {
   flex-direction: column;
 }
 
-/* When plugin renderer is active, make results-area fill remaining space */
-#app:has(.everything-search) .results-area {
-  flex: 1;
-  min-height: 0;
-}
-
-#app:has(.everything-search) .results-list {
-  height: 100%;
-}
-
-/* ============================================================
-   Search Bar
-   ============================================================ */
-
+/* Search Bar */
 .search-bar {
   display: flex;
   align-items: center;
@@ -69,7 +56,7 @@ html, body {
   gap: 8px;
 }
 
-#search-input {
+.search-bar input {
   flex: 1;
   height: 100%;
   background: none;
@@ -81,7 +68,7 @@ html, body {
   caret-color: var(--accent);
 }
 
-#search-input::placeholder {
+.search-bar input::placeholder {
   color: var(--text-secondary);
 }
 
@@ -123,35 +110,7 @@ html, body {
   color: var(--text-primary);
 }
 
-/* ============================================================
-   Hint Bar
-   ============================================================ */
-
-.hint-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 32px;
-  min-height: 32px;
-  color: var(--text-hint);
-  font-size: 11px;
-  padding: 0 16px;
-  transition: opacity var(--transition-fast);
-}
-
-.hint-bar.hidden {
-  display: none;
-}
-
-#hotkey-hint {
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-/* ============================================================
-   Results Area
-   ============================================================ */
-
+/* Results Area */
 .results-area {
   display: flex;
   flex-direction: column;
@@ -159,10 +118,6 @@ html, body {
   min-height: 0;
   overflow: hidden;
   animation: slideDown var(--transition-medium) forwards;
-}
-
-.results-area.hidden {
-  display: none;
 }
 
 @keyframes slideDown {
@@ -204,10 +159,7 @@ html, body {
   border-radius: 2px;
 }
 
-/* ============================================================
-   Result Item
-   ============================================================ */
-
+/* Result Item */
 .result-item {
   display: flex;
   align-items: center;
@@ -301,10 +253,25 @@ html, body {
   text-align: center;
 }
 
-/* ============================================================
-   Settings Modal
-   ============================================================ */
+/* Hint Bar */
+.hint-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  min-height: 32px;
+  color: var(--text-hint);
+  font-size: 11px;
+  padding: 0 16px;
+  transition: opacity var(--transition-fast);
+}
 
+.hotkey-hint {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Settings Modal */
 .modal {
   position: fixed;
   top: 0;
@@ -317,10 +284,6 @@ html, body {
   background: rgba(0, 0, 0, 0.5);
   z-index: 100;
   animation: fadeIn 0.2s ease;
-}
-
-.modal.hidden {
-  display: none;
 }
 
 @keyframes fadeIn {
@@ -403,20 +366,28 @@ html, body {
   color: var(--accent);
 }
 
-/* ============================================================
-   Plugin Renderers
-   ============================================================ */
-
-.plugin-renderer {
-  margin: 4px 0;
-  padding: 0;
-}
-
-.plugin-renderer-content {
-  padding: 8px 12px;
-}
-
 .setting-hint {
   font-size: 11px;
   color: var(--text-hint);
+}
+
+/* Plugin Renderer */
+.plugin-renderer {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.plugin-loading {
+  padding: 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.plugin-error {
+  padding: 16px;
+  color: #ff6b6b;
+  font-size: 13px;
+  text-align: center;
 }

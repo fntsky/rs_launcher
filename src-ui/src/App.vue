@@ -1,0 +1,156 @@
+<template>
+  <div id="app">
+    <SearchBar ref="searchBarRef" :show-back="!!activePlugin" @back="deactivatePlugin" @settings="openSettings"
+      @search="onSearch" />
+    <ResultList v-if="!activePlugin && results.length > 0" :results="results" :selected-index="selectedIndex"
+      @select="selectResult" @execute="executeResult" />
+    <PluginRenderer v-if="activePlugin" ref="pluginRendererRef" :plugin-id="activePlugin" :query="query" @back="deactivatePlugin" />
+    <HintBar v-if="!activePlugin && results.length === 0 && !query" />
+    <SettingsModal v-if="settingsOpen" :hotkey="hotkey" @close="closeSettings" @save-hotkey="saveHotkey" />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue'
+import SearchBar from './components/SearchBar.vue'
+import ResultList from './components/ResultList.vue'
+import PluginRenderer from './components/PluginRenderer.vue'
+import HintBar from './components/HintBar.vue'
+import SettingsModal from './components/SettingsModal.vue'
+import { useTauri } from './composables/useTauri'
+import { useSearch } from './composables/useSearch'
+import { useWindow } from './composables/useWindow'
+import type { SearchResult } from './types'
+
+const { invoke } = useTauri()
+const { search } = useSearch()
+const { setWindowSize, setPluginWindowSize, hideWindow } = useWindow()
+
+const query = ref('')
+const results = ref<SearchResult[]>([])
+const selectedIndex = ref(-1)
+const activePlugin = ref<string | null>(null)
+const settingsOpen = ref(false)
+const hotkey = ref('Ctrl+Alt+Space')
+const searchBarRef = ref<InstanceType<typeof SearchBar>>()
+const pluginRendererRef = ref<InstanceType<typeof PluginRenderer>>()
+
+async function onSearch(q: string) {
+  query.value = q
+  if (activePlugin.value) {
+    // Forward search to active plugin
+    pluginRendererRef.value?.doSearch(q)
+    return
+  }
+  results.value = await search(q)
+  selectedIndex.value = results.value.length > 0 ? 0 : -1
+  setWindowSize(results.value.length > 0)
+}
+
+function selectResult(index: number) {
+  selectedIndex.value = index
+}
+
+async function executeResult(index: number) {
+  const result = results.value[index]
+  if (!result) return
+  if (result.action === 'open_renderer') {
+    activePlugin.value = result.plugin_id
+    console.log('Activating plugin:', result.plugin_id)
+    setPluginWindowSize()
+    return
+  }
+  await invoke('execute_result', { subtitle: result.subtitle })
+}
+
+function deactivatePlugin() {
+  activePlugin.value = null
+  query.value = ''
+  results.value = []
+  selectedIndex.value = -1
+  setWindowSize(false)
+  searchBarRef.value?.clear()
+  searchBarRef.value?.focus()
+}
+
+function openSettings() {
+  settingsOpen.value = true
+}
+
+function closeSettings() {
+  settingsOpen.value = false
+}
+
+async function saveHotkey(newHotkey: string) {
+  hotkey.value = newHotkey
+  await invoke('save_hotkey', { shortcutStr: newHotkey })
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  // ESC: close plugin or hide window
+  if (e.key === 'Escape') {
+    if (settingsOpen.value) {
+      settingsOpen.value = false
+      return
+    }
+    if (activePlugin.value) {
+      deactivatePlugin()
+      return
+    }
+    if (query.value) {
+      query.value = ''
+      onSearch('')
+      return
+    }
+    hideWindow()
+    return
+  }
+
+  // Forward keyboard events to active plugin
+  if (activePlugin.value && pluginRendererRef.value) {
+    pluginRendererRef.value.onKeyDown(e)
+    return
+  }
+
+  // Enter: execute selected result
+  if (e.key === 'Enter' && results.value.length > 0 && selectedIndex.value >= 0) {
+    e.preventDefault()
+    executeResult(selectedIndex.value)
+    return
+  }
+
+  // ArrowDown: select next result
+  if (e.key === 'ArrowDown' && results.value.length > 0) {
+    e.preventDefault()
+    selectedIndex.value = Math.min(selectedIndex.value + 1, results.value.length - 1)
+    return
+  }
+
+  // ArrowUp: select previous result
+  if (e.key === 'ArrowUp' && results.value.length > 0) {
+    e.preventDefault()
+    selectedIndex.value = Math.max(selectedIndex.value - 1, 0)
+    return
+  }
+}
+
+onMounted(async () => {
+  window.addEventListener('keydown', handleKeydown)
+
+  try {
+    const config = await invoke('get_config')
+    hotkey.value = config.hotkey_display
+  } catch (e) {
+    console.error('Failed to load config:', e)
+  }
+  results.value = await search('')
+  selectedIndex.value = results.value.length > 0 ? 0 : -1
+  if (results.value.length > 0) {
+    setWindowSize(true)
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
+</script>

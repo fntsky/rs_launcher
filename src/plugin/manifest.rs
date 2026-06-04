@@ -15,6 +15,8 @@ pub struct PluginManifest {
     pub dll: String,
     #[serde(default)]
     pub renderer: Option<String>,
+    #[serde(default, rename = "vue_component")]
+    pub vue_component: Option<String>,
     #[serde(default)]
     pub commands: Vec<CommandDef>,
 }

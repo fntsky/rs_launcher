@@ -126,6 +126,19 @@ pub struct RendererInfo {
     pub js: String,
 }
 
+#[derive(Serialize, Clone)]
+pub struct VueComponentInfo {
+    pub plugin_id: String,
+    pub name: String,
+    pub js: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct PluginCssInfo {
+    pub plugin_id: String,
+    pub css: String,
+}
+
 #[tauri::command]
 fn get_plugin_renderers(state: State<'_, AppState>) -> Vec<RendererInfo> {
     let mut renderers = Vec::new();
@@ -165,7 +178,7 @@ fn get_plugin_renderer(plugin_id: String, state: State<'_, AppState>) -> Option<
     }
     let html_path = dynamic.renderer_path()?;
     let html_content = std::fs::read_to_string(&html_path).unwrap_or_default();
-    let js_path = html_path.parent().map(|p| p.join("app.js")).filter(|p| p.exists());
+    let _js_path = html_path.parent().map(|p| p.join("app.js")).filter(|p| p.exists());
     let css_path = html_path.with_extension("css");
     let css_content = if css_path.exists() {
         std::fs::read_to_string(&css_path).unwrap_or_default()
@@ -180,6 +193,36 @@ fn get_plugin_renderer(plugin_id: String, state: State<'_, AppState>) -> Option<
         html: html_content,
         css: css_content,
         js: js_content,
+    })
+}
+
+#[tauri::command]
+fn get_plugin_vue_component(plugin_id: String, state: State<'_, AppState>) -> Option<VueComponentInfo> {
+    let plugin = state.registry.find_by_id(&plugin_id)?;
+    let dynamic = plugin.as_dynamic()?;
+    let js_path = dynamic.vue_component_path()?;
+    let js_content = std::fs::read_to_string(&js_path).unwrap_or_default();
+    Some(VueComponentInfo {
+        plugin_id: plugin.id().to_string(),
+        name: plugin.name().to_string(),
+        js: js_content,
+    })
+}
+
+#[tauri::command]
+fn get_plugin_css(plugin_id: String, state: State<'_, AppState>) -> Option<PluginCssInfo> {
+    let plugin = state.registry.find_by_id(&plugin_id)?;
+    let dynamic = plugin.as_dynamic()?;
+    let js_path = dynamic.vue_component_path()?;
+    let css_path = js_path.parent()?.join("style.css");
+    let css_content = if css_path.exists() {
+        std::fs::read_to_string(&css_path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    Some(PluginCssInfo {
+        plugin_id: plugin.id().to_string(),
+        css: css_content,
     })
 }
 
@@ -232,6 +275,8 @@ pub fn run() {
             plugin_invoke,
             get_plugin_renderers,
             get_plugin_renderer,
+            get_plugin_vue_component,
+            get_plugin_css,
         ])
         .setup(|app| {
             // Register global shortcut

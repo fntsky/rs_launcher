@@ -107,11 +107,15 @@ impl DynamicPlugin {
     }
 
     pub fn has_renderer(&self) -> bool {
-        self.manifest.renderer.is_some()
+        self.manifest.renderer.is_some() || self.manifest.vue_component.is_some()
     }
 
     pub fn renderer_path(&self) -> Option<PathBuf> {
         self.manifest.renderer.as_ref().map(|r| self.plugin_dir.join(r))
+    }
+
+    pub fn vue_component_path(&self) -> Option<PathBuf> {
+        self.manifest.vue_component.as_ref().map(|r| self.plugin_dir.join(r))
     }
 }
 

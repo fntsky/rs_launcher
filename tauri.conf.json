@@ -4,9 +4,8 @@
   "version": "0.2.0",
   "identifier": "com.rs-launcher.app",
   "build": {
-    "frontendDist": "src-ui",
-    "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "frontendDist": "src-ui/dist",
+    "beforeBuildCommand": "cd src-ui && npm run build"
   },
   "app": {
     "withGlobalTauri": true,
@@ -22,14 +21,17 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "visible": false,
-        "center": false
+        "center": false,
+        "devtools": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval'; img-src 'self' asset: http://asset.localhost https://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:",
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval' blob:; connect-src 'self' ipc: http://ipc.localhost https://ipc.localhost; img-src 'self' asset: http://asset.localhost https://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:",
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": [
+          "**"
+        ]
       }
     }
   },

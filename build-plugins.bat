@@ -70,6 +70,23 @@ for /d %%D in ("%PLUGINS_DIR%\*") do (
             xcopy /y /e /q /i "!plugin_src!\renderer" "!dst_dir!\renderer\" >nul 2>nul
         )
 
+        rem Build Vue component if package.json exists
+        if exist "!plugin_src!\renderer\package.json" (
+            echo [BUILD] Building Vue component for: !plugin_name!
+            pushd "!plugin_src!\renderer"
+            if exist "node_modules" (
+                call npm run build
+            ) else (
+                echo [BUILD] Installing dependencies for: !plugin_name!
+                call npm install --ignore-scripts
+                call npm run build
+            )
+            popd
+            if exist "!plugin_src!\renderer\dist" (
+                xcopy /y /e /q /i "!plugin_src!\renderer\dist" "!dst_dir!\renderer\dist\" >nul 2>nul
+            )
+        )
+
         echo [BUILD] Deployed: !plugin_name!
     )
 )
