@@ -22,7 +22,8 @@
           <img class="ev-image-img" :src="previewImageUrl" alt="preview" />
         </div>
       </div>
-      <div v-else-if="previewVisible && !previewIsImage" class="ev-preview ev-preview-text" v-html="previewContent"></div>
+      <div v-else-if="previewVisible && !previewIsImage" class="ev-preview ev-preview-text" v-html="previewContent">
+      </div>
       <div class="ev-file-info">
         <div v-if="results[selectedIndex]?.size">
           <div class="ev-info-label">大小</div>
@@ -161,7 +162,7 @@ async function search() {
     results.value = []
   } finally {
     loading.value = false
-  } 
+  }
 }
 
 function onKeyDown(e: KeyboardEvent) {
