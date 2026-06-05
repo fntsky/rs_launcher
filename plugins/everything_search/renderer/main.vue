@@ -45,7 +45,42 @@
           </div>
         </div>
       </div>
-      <div v-else-if="previewVisible && !previewIsImage && !previewIsVideo && !previewIsPptx" class="ev-preview ev-preview-text" v-html="previewContent">
+      <div v-else-if="previewVisible && previewIsDocx && previewDocxData" class="ev-preview ev-preview-docx">
+        <div class="ev-docx-header">
+          <span class="ev-docx-title">{{ previewDocxData.title || '未命名文档' }}</span>
+          <span class="ev-docx-count">{{ previewDocxData.paragraphs }} 段</span>
+        </div>
+        <div v-if="previewDocxData.url" class="ev-docx-render">
+          <VueOfficeDocx
+            :src="previewDocxData.url"
+            class="ev-docx-office"
+            @error="onDocxError"
+          />
+        </div>
+        <div v-else class="ev-docx-fallback">
+          <div class="ev-docx-fallback-msg">文档预览不可用</div>
+        </div>
+      </div>
+      <div v-else-if="previewVisible && previewIsXlsx && previewXlsxData" class="ev-preview ev-preview-xlsx">
+        <div class="ev-xlsx-header">
+          <span class="ev-xlsx-title">电子表格</span>
+          <span class="ev-xlsx-count">{{ previewXlsxData.sheets }} 个工作表</span>
+        </div>
+        <div v-if="previewXlsxData.url" class="ev-xlsx-render">
+          <VueOfficeExcel
+            :src="previewXlsxData.url"
+            class="ev-xlsx-office"
+            @error="onXlsxError"
+          />
+        </div>
+        <div v-else class="ev-xlsx-fallback">
+          <div class="ev-xlsx-fallback-msg">表格预览不可用</div>
+        </div>
+      </div>
+      <div v-else-if="previewVisible && previewIsMd" class="ev-preview ev-preview-md">
+        <VueMarkdownPreview :source="previewMdContent" />
+      </div>
+      <div v-else-if="previewVisible && !previewIsImage && !previewIsVideo && !previewIsPptx && !previewIsDocx && !previewIsXlsx && !previewIsMd" class="ev-preview ev-preview-text" v-html="previewContent">
       </div>
       <div class="ev-file-info">
         <div v-if="currentResult?.size">
@@ -69,6 +104,9 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import hljs from 'highlight.js/lib/common'
 import 'highlight.js/styles/github-dark.css'
 import VueOfficePptx from '@vue-office/pptx'
+import VueOfficeDocx from '@vue-office/docx'
+import VueOfficeExcel from '@vue-office/excel'
+import VueMarkdownPreview from '@uivjs/vue-markdown-preview'
 import type { RSKeyEvent } from './rs-sdk'
 
 const TEXT_EXTENSIONS = new Set([
@@ -90,6 +128,14 @@ const VIDEO_EXTENSIONS = new Set([
 
 const PPTX_EXTENSIONS = new Set([
   'pptx', 'ppt',
+])
+
+const DOCX_EXTENSIONS = new Set([
+  'docx', 'doc',
+])
+
+const XLSX_EXTENSIONS = new Set([
+  'xlsx', 'xls',
 ])
 
 function getFileExt(filename: string): string {
@@ -123,6 +169,18 @@ function getVideoMime(filename: string): string | undefined {
 
 function isPptxFile(filename: string): boolean {
   return PPTX_EXTENSIONS.has(getFileExt(filename))
+}
+
+function isDocxFile(filename: string): boolean {
+  return DOCX_EXTENSIONS.has(getFileExt(filename))
+}
+
+function isXlsxFile(filename: string): boolean {
+  return XLSX_EXTENSIONS.has(getFileExt(filename))
+}
+
+function isMdFile(filename: string): boolean {
+  return getFileExt(filename) === 'md'
 }
 
 function getHljsLanguage(filename: string): string | undefined {
@@ -174,10 +232,18 @@ const previewVisible = ref(false)
 const previewIsImage = ref(false)
 const previewIsVideo = ref(false)
 const previewIsPptx = ref(false)
+const previewIsDocx = ref(false)
+const previewIsXlsx = ref(false)
+const previewIsMd = ref(false)
 const previewPptxData = ref<{ url: string | null; title: string | null; slides: { index: number; text: string }[] } | null>(null)
+const previewDocxData = ref<{ url: string | null; title: string | null; paragraphs: number } | null>(null)
+const previewXlsxData = ref<{ url: string | null; sheets: number; sheetNames: string[] } | null>(null)
+const previewMdContent = ref('')
 
 let pptxBlobUrl: string | null = null
 let videoBlobUrl: string | null = null
+let docxBlobUrl: string | null = null
+let xlsxBlobUrl: string | null = null
 
 function revokePptxBlobUrl() {
   if (pptxBlobUrl) {
@@ -190,6 +256,20 @@ function revokeVideoBlobUrl() {
   if (videoBlobUrl) {
     URL.revokeObjectURL(videoBlobUrl)
     videoBlobUrl = null
+  }
+}
+
+function revokeDocxBlobUrl() {
+  if (docxBlobUrl) {
+    URL.revokeObjectURL(docxBlobUrl)
+    docxBlobUrl = null
+  }
+}
+
+function revokeXlsxBlobUrl() {
+  if (xlsxBlobUrl) {
+    URL.revokeObjectURL(xlsxBlobUrl)
+    xlsxBlobUrl = null
   }
 }
 
@@ -253,16 +333,26 @@ async function updatePreview() {
     previewIsImage.value = false
     previewIsVideo.value = false
     previewIsPptx.value = false
+    previewIsDocx.value = false
+    previewIsXlsx.value = false
+    previewIsMd.value = false
     revokePptxBlobUrl()
     revokeVideoBlobUrl()
+    revokeDocxBlobUrl()
+    revokeXlsxBlobUrl()
     return
   }
 
   if (isImageFile(result.subtitle)) {
     revokePptxBlobUrl()
     revokeVideoBlobUrl()
+    revokeDocxBlobUrl()
+    revokeXlsxBlobUrl()
     previewIsVideo.value = false
     previewIsPptx.value = false
+    previewIsDocx.value = false
+    previewIsXlsx.value = false
+    previewIsMd.value = false
     try {
       const res = await window.RS.invoke('read_image', { path: result.subtitle })
       const data = typeof res === 'string' ? JSON.parse(res) : res
@@ -284,7 +374,13 @@ async function updatePreview() {
   if (isVideoFile(result.subtitle)) {
     revokePptxBlobUrl()
     revokeVideoBlobUrl()
+    revokeDocxBlobUrl()
+    revokeXlsxBlobUrl()
     previewIsImage.value = false
+    previewIsPptx.value = false
+    previewIsDocx.value = false
+    previewIsXlsx.value = false
+    previewIsMd.value = false
     try {
       const buf = await window.RS.readBinary(result.subtitle)
       const mime = getVideoMime(result.subtitle) || 'video/mp4'
@@ -302,9 +398,14 @@ async function updatePreview() {
 
   if (isPptxFile(result.subtitle)) {
     revokeVideoBlobUrl()
+    revokeDocxBlobUrl()
+    revokeXlsxBlobUrl()
     previewIsImage.value = false
     previewIsVideo.value = false
     previewIsPptx.value = false
+    previewIsDocx.value = false
+    previewIsXlsx.value = false
+    previewIsMd.value = false
     previewVisible.value = false
     try {
       const metaRes = await window.RS.invoke('read_pptx', { path: result.subtitle })
@@ -313,7 +414,6 @@ async function updatePreview() {
         status.value = meta.error
         return
       }
-      // Try visual preview via asset protocol; fall back to text-only
       try {
         const binaryBuf = await window.RS.readBinary(result.subtitle)
         revokePptxBlobUrl()
@@ -331,11 +431,114 @@ async function updatePreview() {
     return
   }
 
+  if (isDocxFile(result.subtitle)) {
+    revokePptxBlobUrl()
+    revokeVideoBlobUrl()
+    revokeXlsxBlobUrl()
+    previewIsImage.value = false
+    previewIsVideo.value = false
+    previewIsPptx.value = false
+    previewIsDocx.value = false
+    previewIsXlsx.value = false
+    previewIsMd.value = false
+    previewVisible.value = false
+    try {
+      const metaRes = await window.RS.invoke('read_docx', { path: result.subtitle })
+      const meta = typeof metaRes === 'string' ? JSON.parse(metaRes) : metaRes
+      if (meta.error) {
+        status.value = meta.error
+        return
+      }
+      try {
+        const binaryBuf = await window.RS.readBinary(result.subtitle)
+        revokeDocxBlobUrl()
+        const blob = new Blob([binaryBuf], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
+        docxBlobUrl = URL.createObjectURL(blob)
+        previewDocxData.value = { url: docxBlobUrl, title: meta.title, paragraphs: meta.paragraphs }
+      } catch {
+        previewDocxData.value = { url: null, title: meta.title, paragraphs: meta.paragraphs }
+      }
+      previewIsDocx.value = true
+      previewVisible.value = true
+    } catch (e: any) {
+      status.value = '文档加载失败: ' + (e?.message || e)
+    }
+    return
+  }
+
+  if (isXlsxFile(result.subtitle)) {
+    revokePptxBlobUrl()
+    revokeVideoBlobUrl()
+    revokeDocxBlobUrl()
+    previewIsImage.value = false
+    previewIsVideo.value = false
+    previewIsPptx.value = false
+    previewIsDocx.value = false
+    previewIsXlsx.value = false
+    previewIsMd.value = false
+    previewVisible.value = false
+    try {
+      const metaRes = await window.RS.invoke('read_xlsx', { path: result.subtitle })
+      const meta = typeof metaRes === 'string' ? JSON.parse(metaRes) : metaRes
+      if (meta.error) {
+        status.value = meta.error
+        return
+      }
+      try {
+        const binaryBuf = await window.RS.readBinary(result.subtitle)
+        revokeXlsxBlobUrl()
+        const blob = new Blob([binaryBuf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+        xlsxBlobUrl = URL.createObjectURL(blob)
+        previewXlsxData.value = { url: xlsxBlobUrl, sheets: meta.sheets, sheetNames: meta.sheet_names }
+      } catch {
+        previewXlsxData.value = { url: null, sheets: meta.sheets, sheetNames: meta.sheet_names }
+      }
+      previewIsXlsx.value = true
+      previewVisible.value = true
+    } catch (e: any) {
+      status.value = '表格加载失败: ' + (e?.message || e)
+    }
+    return
+  }
+
+  if (isMdFile(result.subtitle)) {
+    revokePptxBlobUrl()
+    revokeVideoBlobUrl()
+    revokeDocxBlobUrl()
+    revokeXlsxBlobUrl()
+    previewIsImage.value = false
+    previewIsVideo.value = false
+    previewIsPptx.value = false
+    previewIsDocx.value = false
+    previewIsXlsx.value = false
+    previewIsMd.value = false
+    previewVisible.value = false
+    try {
+      const res = await window.RS.invoke('read_file', { path: result.subtitle })
+      const data = typeof res === 'string' ? JSON.parse(res) : res
+      if (data.error) {
+        previewVisible.value = false
+      } else {
+        previewMdContent.value = data.content
+        previewIsMd.value = true
+        previewVisible.value = true
+      }
+    } catch {
+      previewVisible.value = false
+    }
+    return
+  }
+
   revokePptxBlobUrl()
   revokeVideoBlobUrl()
+  revokeDocxBlobUrl()
+  revokeXlsxBlobUrl()
   previewIsImage.value = false
   previewIsVideo.value = false
   previewIsPptx.value = false
+  previewIsDocx.value = false
+  previewIsXlsx.value = false
+  previewIsMd.value = false
 
   if (!isTextFile(result.subtitle)) {
     previewVisible.value = false
@@ -375,6 +578,16 @@ function onPptxRendered() {
 function onPptxError(e: unknown) {
   console.error('[pptx] render error', e)
   status.value = 'PPT 渲染失败: ' + (e instanceof Error ? e.message : String(e))
+}
+
+function onDocxError(e: unknown) {
+  console.error('[docx] render error', e)
+  status.value = '文档渲染失败: ' + (e instanceof Error ? e.message : String(e))
+}
+
+function onXlsxError(e: unknown) {
+  console.error('[xlsx] render error', e)
+  status.value = '表格渲染失败: ' + (e instanceof Error ? e.message : String(e))
 }
 
 const resultsEl = ref<HTMLElement | null>(null)
@@ -422,6 +635,8 @@ onMounted(async () => {
 onUnmounted(() => {
   revokePptxBlobUrl()
   revokeVideoBlobUrl()
+  revokeDocxBlobUrl()
+  revokeXlsxBlobUrl()
   unsubQuery?.()
   unsubKey?.()
   unsubCtx?.()
@@ -689,6 +904,140 @@ html, body, #app {
   color: var(--text-primary, #e0e0e0);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.ev-preview-docx {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+}
+
+.ev-docx-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--divider, #3a3a42);
+  background: var(--bg-primary, #16161a);
+}
+
+.ev-docx-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0f0f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.ev-docx-count {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  border-radius: 10px;
+}
+
+.ev-docx-render {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #fff;
+}
+
+.ev-docx-office {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.ev-docx-fallback {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.ev-docx-fallback-msg {
+  color: var(--text-hint, #888);
+  font-size: 13px;
+}
+
+.ev-preview-xlsx {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+}
+
+.ev-xlsx-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--divider, #3a3a42);
+  background: var(--bg-primary, #16161a);
+}
+
+.ev-xlsx-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0f0f0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.ev-xlsx-count {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  border-radius: 10px;
+}
+
+.ev-xlsx-render {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #fff;
+}
+
+.ev-xlsx-office {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.ev-xlsx-fallback {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.ev-xlsx-fallback-msg {
+  color: var(--text-hint, #888);
+  font-size: 13px;
+}
+
+.ev-preview-md {
+  overflow-y: auto;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
 }
 
 .ev-file-info {

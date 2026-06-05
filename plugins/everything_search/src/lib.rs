@@ -534,6 +534,105 @@ fn extract_text_from_slide_xml(xml: &str) -> String {
     out
 }
 
+fn read_docx_content(path: &str) -> String {
+    use std::io::Read;
+
+    let path_obj = std::path::Path::new(path);
+    if !path_obj.exists() {
+        return r#"{"title":null,"paragraphs":0,"error":"file not found"}"#.to_string();
+    }
+
+    let ext = path_obj.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    if ext == "doc" {
+        return r#"{"title":null,"paragraphs":0,"error":"旧版 .doc 二进制格式不支持预览，请直接打开"}"#.to_string();
+    }
+
+    let file = match std::fs::File::open(path_obj) {
+        Ok(f) => f,
+        Err(e) => return format!(r#"{{"title":null,"paragraphs":0,"error":"{}"}}"#, e.to_string()),
+    };
+
+    let mut archive = match zip::ZipArchive::new(file) {
+        Ok(a) => a,
+        Err(e) => return format!(r#"{{"title":null,"paragraphs":0,"error":"打开 docx 失败: {}"}}"#, e.to_string()),
+    };
+
+    let mut title: Option<String> = None;
+    if let Ok(mut core) = archive.by_name("docProps/core.xml") {
+        let mut s = String::new();
+        if core.read_to_string(&mut s).is_ok() {
+            if let Some(start) = s.find("<dc:title>") {
+                let after = start + "<dc:title>".len();
+                if let Some(end) = s[after..].find("</dc:title>") {
+                    title = Some(unescape_xml(&s[after..after + end]));
+                }
+            }
+        }
+    }
+
+    let mut paragraphs = 0;
+    if let Ok(mut doc) = archive.by_name("word/document.xml") {
+        let mut s = String::new();
+        if doc.read_to_string(&mut s).is_ok() {
+            paragraphs = s.matches("</w:p>").count();
+        }
+    }
+
+    serde_json::json!({
+        "title": title,
+        "paragraphs": paragraphs,
+        "error": null,
+    }).to_string()
+}
+
+fn read_xlsx_content(path: &str) -> String {
+    use std::io::Read;
+
+    let path_obj = std::path::Path::new(path);
+    if !path_obj.exists() {
+        return r#"{"sheets":0,"sheet_names":[],"error":"file not found"}"#.to_string();
+    }
+
+    let file = match std::fs::File::open(path_obj) {
+        Ok(f) => f,
+        Err(e) => return format!(r#"{{"sheets":0,"sheet_names":[],"error":"{}"}}"#, e.to_string()),
+    };
+
+    let mut archive = match zip::ZipArchive::new(file) {
+        Ok(a) => a,
+        Err(e) => return format!(r#"{{"sheets":0,"sheet_names":[],"error":"打开 xlsx 失败: {}"}}"#, e.to_string()),
+    };
+
+    let mut sheet_names: Vec<String> = Vec::new();
+    if let Ok(mut wb) = archive.by_name("xl/workbook.xml") {
+        let mut s = String::new();
+        if wb.read_to_string(&mut s).is_ok() {
+            let bytes = s.as_bytes();
+            let mut i = 0;
+            while i < bytes.len() {
+                if i + 7 <= bytes.len() && &bytes[i..i + 7] == b"<sheet " {
+                    if let Some(name_start_rel) = s[i..].find("name=\"") {
+                        let name_start = i + name_start_rel + "name=\"".len();
+                        if let Some(name_end_rel) = s[name_start..].find('\"') {
+                            let name = &s[name_start..name_start + name_end_rel];
+                            sheet_names.push(name.to_string());
+                            i = name_start + name_end_rel;
+                            continue;
+                        }
+                    }
+                }
+                i += 1;
+            }
+        }
+    }
+
+    serde_json::json!({
+        "sheets": sheet_names.len(),
+        "sheet_names": sheet_names,
+        "error": null,
+    }).to_string()
+}
+
 fn read_file_content(path: &str) -> String {
     use std::io::Read;
 
@@ -672,6 +771,20 @@ pub extern "C" fn plugin_invoke(
                 .and_then(|v| v["path"].as_str().map(|s| s.to_string()))
                 .unwrap_or_default();
             read_pptx_content(&path)
+        }
+        "read_docx" => {
+            let path = serde_json::from_str::<serde_json::Value>(args_str)
+                .ok()
+                .and_then(|v| v["path"].as_str().map(|s| s.to_string()))
+                .unwrap_or_default();
+            read_docx_content(&path)
+        }
+        "read_xlsx" => {
+            let path = serde_json::from_str::<serde_json::Value>(args_str)
+                .ok()
+                .and_then(|v| v["path"].as_str().map(|s| s.to_string()))
+                .unwrap_or_default();
+            read_xlsx_content(&path)
         }
         _ => r#"{"error":"unknown command"}"#.to_string(),
     };

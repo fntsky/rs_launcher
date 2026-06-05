@@ -7,6 +7,10 @@
     "build": "vue-tsc --noEmit && vite build"
   },
   "dependencies": {
+    "@babel/runtime": "^7.29.7",
+    "@uivjs/vue-markdown-preview": "^1.0.5",
+    "@vue-office/docx": "^1.6.3",
+    "@vue-office/excel": "^1.7.14",
     "@vue-office/pptx": "^1.0.1",
     "highlight.js": "^11.11.1",
     "vue": "^3.4.0",
