@@ -96,6 +96,18 @@ export function usePluginIframe(options: UsePluginIframeOptions) {
       } catch (e) {
         sendBack({ ok: false, error: String(e) })
       }
+    } else if (data.type === 'rs:convert-file-src') {
+      const path: string = data.path
+      if (!path) return
+      const sendBack = (payload: Record<string, unknown>) => {
+        iframe.contentWindow?.postMessage({ type: 'rs:convert-file-src:res', protocol: 'iframe-renderer/1', id: data.id, ...payload }, '*')
+      }
+      try {
+        const url = convertFileSrc(path)
+        sendBack({ ok: true, url })
+      } catch (e) {
+        sendBack({ ok: false, error: String(e) })
+      }
     } else if (data.type === 'rs:invoke:req') {
       invoke<string>('plugin_invoke', {
         pluginId: init.plugin_id,

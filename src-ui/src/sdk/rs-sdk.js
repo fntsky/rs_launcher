@@ -17,6 +17,7 @@
     invokeQueue: [],
     pendingInvokes: Object.create(null),
     pendingBinary: Object.create(null),
+    pendingConvertSrc: Object.create(null),
     invokeCounter: 0,
     initReceived: false,
   };
@@ -157,6 +158,25 @@
     });
   }
 
+  function convertFileSrc(path) {
+    return new Promise(function (resolve, reject) {
+      var id = genId();
+      var done = false;
+      var timer = setTimeout(function () {
+        if (done) return;
+        done = true;
+        delete state.pendingConvertSrc[id];
+        reject(new Error('convertFileSrc timeout: ' + path));
+      }, INVOKE_TIMEOUT_MS);
+      state.pendingConvertSrc[id] = {
+        resolve: function (v) { if (done) return; done = true; clearTimeout(timer); resolve(v); },
+        reject: function (e) { if (done) return; done = true; clearTimeout(timer); reject(e); },
+        path: path,
+      };
+      send('rs:convert-file-src', { id: id, path: path });
+    });
+  }
+
   function flushInvokeQueue() {
     var ids = state.invokeQueue;
     state.invokeQueue = [];
@@ -202,6 +222,15 @@
       delete state.pendingBinary[data.id];
       if (data.ok) pb.resolve(data.value);
       else pb.reject(new Error(data.error || 'readBinary error'));
+      return;
+    }
+
+    if (type === 'rs:convert-file-src:res') {
+      var pc = state.pendingConvertSrc[data.id];
+      if (!pc) return;
+      delete state.pendingConvertSrc[data.id];
+      if (data.ok) pc.resolve(data.url);
+      else pc.reject(new Error(data.error || 'convertFileSrc error'));
       return;
     }
 
@@ -290,6 +319,7 @@
     get query() { return state.query; },
     invoke: invoke,
     readBinary: readBinary,
+    convertFileSrc: convertFileSrc,
     openFile: openFile,
     hideWindow: hideWindow,
     notifyBack: notifyBack,

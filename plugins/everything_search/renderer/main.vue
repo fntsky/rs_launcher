@@ -242,8 +242,6 @@ const previewMdContent = ref('')
 
 let pptxBlobUrl: string | null = null
 let videoBlobUrl: string | null = null
-let docxBlobUrl: string | null = null
-let xlsxBlobUrl: string | null = null
 
 function revokePptxBlobUrl() {
   if (pptxBlobUrl) {
@@ -256,20 +254,6 @@ function revokeVideoBlobUrl() {
   if (videoBlobUrl) {
     URL.revokeObjectURL(videoBlobUrl)
     videoBlobUrl = null
-  }
-}
-
-function revokeDocxBlobUrl() {
-  if (docxBlobUrl) {
-    URL.revokeObjectURL(docxBlobUrl)
-    docxBlobUrl = null
-  }
-}
-
-function revokeXlsxBlobUrl() {
-  if (xlsxBlobUrl) {
-    URL.revokeObjectURL(xlsxBlobUrl)
-    xlsxBlobUrl = null
   }
 }
 
@@ -338,16 +322,12 @@ async function updatePreview() {
     previewIsMd.value = false
     revokePptxBlobUrl()
     revokeVideoBlobUrl()
-    revokeDocxBlobUrl()
-    revokeXlsxBlobUrl()
     return
   }
 
   if (isImageFile(result.subtitle)) {
     revokePptxBlobUrl()
     revokeVideoBlobUrl()
-    revokeDocxBlobUrl()
-    revokeXlsxBlobUrl()
     previewIsVideo.value = false
     previewIsPptx.value = false
     previewIsDocx.value = false
@@ -374,8 +354,6 @@ async function updatePreview() {
   if (isVideoFile(result.subtitle)) {
     revokePptxBlobUrl()
     revokeVideoBlobUrl()
-    revokeDocxBlobUrl()
-    revokeXlsxBlobUrl()
     previewIsImage.value = false
     previewIsPptx.value = false
     previewIsDocx.value = false
@@ -396,116 +374,9 @@ async function updatePreview() {
     return
   }
 
-  if (isPptxFile(result.subtitle)) {
-    revokeVideoBlobUrl()
-    revokeDocxBlobUrl()
-    revokeXlsxBlobUrl()
-    previewIsImage.value = false
-    previewIsVideo.value = false
-    previewIsPptx.value = false
-    previewIsDocx.value = false
-    previewIsXlsx.value = false
-    previewIsMd.value = false
-    previewVisible.value = false
-    try {
-      const metaRes = await window.RS.invoke('read_pptx', { path: result.subtitle })
-      const meta = typeof metaRes === 'string' ? JSON.parse(metaRes) : metaRes
-      if (meta.error) {
-        status.value = meta.error
-        return
-      }
-      try {
-        const binaryBuf = await window.RS.readBinary(result.subtitle)
-        revokePptxBlobUrl()
-        const blob = new Blob([binaryBuf], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' })
-        pptxBlobUrl = URL.createObjectURL(blob)
-        previewPptxData.value = { url: pptxBlobUrl, title: meta.title, slides: meta.slides || [] }
-      } catch {
-        previewPptxData.value = { url: null, title: meta.title, slides: meta.slides || [] }
-      }
-      previewIsPptx.value = true
-      previewVisible.value = true
-    } catch (e: any) {
-      status.value = 'PPT 加载失败: ' + (e?.message || e)
-    }
-    return
-  }
-
-  if (isDocxFile(result.subtitle)) {
-    revokePptxBlobUrl()
-    revokeVideoBlobUrl()
-    revokeXlsxBlobUrl()
-    previewIsImage.value = false
-    previewIsVideo.value = false
-    previewIsPptx.value = false
-    previewIsDocx.value = false
-    previewIsXlsx.value = false
-    previewIsMd.value = false
-    previewVisible.value = false
-    try {
-      const metaRes = await window.RS.invoke('read_docx', { path: result.subtitle })
-      const meta = typeof metaRes === 'string' ? JSON.parse(metaRes) : metaRes
-      if (meta.error) {
-        status.value = meta.error
-        return
-      }
-      try {
-        const binaryBuf = await window.RS.readBinary(result.subtitle)
-        revokeDocxBlobUrl()
-        const blob = new Blob([binaryBuf], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
-        docxBlobUrl = URL.createObjectURL(blob)
-        previewDocxData.value = { url: docxBlobUrl, title: meta.title, paragraphs: meta.paragraphs }
-      } catch {
-        previewDocxData.value = { url: null, title: meta.title, paragraphs: meta.paragraphs }
-      }
-      previewIsDocx.value = true
-      previewVisible.value = true
-    } catch (e: any) {
-      status.value = '文档加载失败: ' + (e?.message || e)
-    }
-    return
-  }
-
-  if (isXlsxFile(result.subtitle)) {
-    revokePptxBlobUrl()
-    revokeVideoBlobUrl()
-    revokeDocxBlobUrl()
-    previewIsImage.value = false
-    previewIsVideo.value = false
-    previewIsPptx.value = false
-    previewIsDocx.value = false
-    previewIsXlsx.value = false
-    previewIsMd.value = false
-    previewVisible.value = false
-    try {
-      const metaRes = await window.RS.invoke('read_xlsx', { path: result.subtitle })
-      const meta = typeof metaRes === 'string' ? JSON.parse(metaRes) : metaRes
-      if (meta.error) {
-        status.value = meta.error
-        return
-      }
-      try {
-        const binaryBuf = await window.RS.readBinary(result.subtitle)
-        revokeXlsxBlobUrl()
-        const blob = new Blob([binaryBuf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-        xlsxBlobUrl = URL.createObjectURL(blob)
-        previewXlsxData.value = { url: xlsxBlobUrl, sheets: meta.sheets, sheetNames: meta.sheet_names }
-      } catch {
-        previewXlsxData.value = { url: null, sheets: meta.sheets, sheetNames: meta.sheet_names }
-      }
-      previewIsXlsx.value = true
-      previewVisible.value = true
-    } catch (e: any) {
-      status.value = '表格加载失败: ' + (e?.message || e)
-    }
-    return
-  }
-
   if (isMdFile(result.subtitle)) {
     revokePptxBlobUrl()
     revokeVideoBlobUrl()
-    revokeDocxBlobUrl()
-    revokeXlsxBlobUrl()
     previewIsImage.value = false
     previewIsVideo.value = false
     previewIsPptx.value = false
@@ -531,8 +402,6 @@ async function updatePreview() {
 
   revokePptxBlobUrl()
   revokeVideoBlobUrl()
-  revokeDocxBlobUrl()
-  revokeXlsxBlobUrl()
   previewIsImage.value = false
   previewIsVideo.value = false
   previewIsPptx.value = false
@@ -635,8 +504,6 @@ onMounted(async () => {
 onUnmounted(() => {
   revokePptxBlobUrl()
   revokeVideoBlobUrl()
-  revokeDocxBlobUrl()
-  revokeXlsxBlobUrl()
   unsubQuery?.()
   unsubKey?.()
   unsubCtx?.()
@@ -947,14 +814,13 @@ html, body, #app {
 .ev-docx-render {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
   background: #fff;
 }
 
 .ev-docx-office {
   display: block;
   width: 100%;
-  height: 100%;
 }
 
 .ev-docx-fallback {
@@ -1011,14 +877,13 @@ html, body, #app {
 .ev-xlsx-render {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
   background: #fff;
 }
 
 .ev-xlsx-office {
   display: block;
   width: 100%;
-  height: 100%;
 }
 
 .ev-xlsx-fallback {
@@ -1038,6 +903,63 @@ html, body, #app {
   overflow-y: auto;
   padding: 12px 16px;
   background: var(--bg-secondary);
+}
+
+.ev-preview-md h1,
+.ev-preview-md h2,
+.ev-preview-md h3,
+.ev-preview-md h4,
+.ev-preview-md h5,
+.ev-preview-md h6 {
+  color: var(--text-primary, #e0e0e0);
+  border-color: var(--divider, #3a3a42);
+}
+
+.ev-preview-md p,
+.ev-preview-md li,
+.ev-preview-md blockquote {
+  color: var(--text-primary, #e0e0e0);
+}
+
+.ev-preview-md code {
+  color: #e6e6e6;
+  background: var(--bg-hover, #3a3a42);
+}
+
+.ev-preview-md pre {
+  background: var(--bg-primary, #1e1e22);
+  border: 1px solid var(--divider, #3a3a42);
+}
+
+.ev-preview-md pre code {
+  color: #e6e6e6;
+  background: transparent;
+}
+
+.ev-preview-md a {
+  color: var(--accent, #4a90d9);
+}
+
+.ev-preview-md blockquote {
+  border-left-color: var(--accent, #4a90d9);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.ev-preview-md hr {
+  border-color: var(--divider, #3a3a42);
+}
+
+.ev-preview-md table {
+  color: var(--text-primary, #e0e0e0);
+}
+
+.ev-preview-md th,
+.ev-preview-md td {
+  border-color: var(--divider, #3a3a42);
+}
+
+.ev-preview-md img {
+  max-width: 100%;
 }
 
 .ev-file-info {
