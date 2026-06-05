@@ -653,15 +653,12 @@ html, body, #app {
 }
 
 .ev-pptx-render {
-  height: 360px;
-  overflow-y: auto;
   background: #f5f5f5;
 }
 
 .ev-pptx-office {
   display: block;
   width: 100%;
-  min-height: 360px;
 }
 
 .ev-pptx-slide {
