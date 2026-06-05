@@ -109,6 +109,18 @@ function isVideoFile(filename: string): boolean {
   return VIDEO_EXTENSIONS.has(getFileExt(filename))
 }
 
+function getVideoMime(filename: string): string | undefined {
+  const map: Record<string, string> = {
+    mp4: 'video/mp4', m4v: 'video/mp4',
+    webm: 'video/webm',
+    mov: 'video/quicktime',
+    mkv: 'video/x-matroska',
+    avi: 'video/x-msvideo',
+    ogv: 'video/ogg',
+  }
+  return map[getFileExt(filename)]
+}
+
 function isPptxFile(filename: string): boolean {
   return PPTX_EXTENSIONS.has(getFileExt(filename))
 }
@@ -165,11 +177,19 @@ const previewIsPptx = ref(false)
 const previewPptxData = ref<{ url: string | null; title: string | null; slides: { index: number; text: string }[] } | null>(null)
 
 let pptxBlobUrl: string | null = null
+let videoBlobUrl: string | null = null
 
 function revokePptxBlobUrl() {
   if (pptxBlobUrl) {
     URL.revokeObjectURL(pptxBlobUrl)
     pptxBlobUrl = null
+  }
+}
+
+function revokeVideoBlobUrl() {
+  if (videoBlobUrl) {
+    URL.revokeObjectURL(videoBlobUrl)
+    videoBlobUrl = null
   }
 }
 
@@ -234,11 +254,13 @@ async function updatePreview() {
     previewIsVideo.value = false
     previewIsPptx.value = false
     revokePptxBlobUrl()
+    revokeVideoBlobUrl()
     return
   }
 
   if (isImageFile(result.subtitle)) {
     revokePptxBlobUrl()
+    revokeVideoBlobUrl()
     previewIsVideo.value = false
     previewIsPptx.value = false
     try {
@@ -261,18 +283,16 @@ async function updatePreview() {
 
   if (isVideoFile(result.subtitle)) {
     revokePptxBlobUrl()
+    revokeVideoBlobUrl()
     previewIsImage.value = false
     try {
-      const res = await window.RS.invoke('read_video', { path: result.subtitle })
-      const data = typeof res === 'string' ? JSON.parse(res) : res
-      if (data.error) {
-        status.value = data.error
-        previewVisible.value = false
-      } else {
-        previewVideoUrl.value = data.url
-        previewIsVideo.value = true
-        previewVisible.value = true
-      }
+      const buf = await window.RS.readBinary(result.subtitle)
+      const mime = getVideoMime(result.subtitle) || 'video/mp4'
+      const blob = new Blob([buf], { type: mime })
+      videoBlobUrl = URL.createObjectURL(blob)
+      previewVideoUrl.value = videoBlobUrl
+      previewIsVideo.value = true
+      previewVisible.value = true
     } catch (e: any) {
       status.value = '视频加载失败: ' + (e?.message || e)
       previewVisible.value = false
@@ -281,6 +301,7 @@ async function updatePreview() {
   }
 
   if (isPptxFile(result.subtitle)) {
+    revokeVideoBlobUrl()
     previewIsImage.value = false
     previewIsVideo.value = false
     previewIsPptx.value = false
@@ -311,6 +332,7 @@ async function updatePreview() {
   }
 
   revokePptxBlobUrl()
+  revokeVideoBlobUrl()
   previewIsImage.value = false
   previewIsVideo.value = false
   previewIsPptx.value = false
@@ -399,6 +421,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   revokePptxBlobUrl()
+  revokeVideoBlobUrl()
   unsubQuery?.()
   unsubKey?.()
   unsubCtx?.()

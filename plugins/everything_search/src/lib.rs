@@ -385,52 +385,6 @@ fn read_image_as_data_url(path: &str) -> String {
     }).to_string()
 }
 
-fn read_video_as_data_url(path: &str) -> String {
-    use std::io::Read;
-
-    let path_obj = std::path::Path::new(path);
-    if !path_obj.exists() {
-        return r#"{"url":null,"error":"file not found"}"#.to_string();
-    }
-
-    let metadata = match std::fs::metadata(path_obj) {
-        Ok(m) => m,
-        Err(e) => return format!(r#"{{"url":null,"error":"{}"}}"#, e.to_string()),
-    };
-
-    // 30MB limit for video preview (base64 inflates ~33% + IPC copy)
-    if metadata.len() > 30 * 1024 * 1024 {
-        return r#"{"url":null,"error":"视频文件过大 (>30MB)，请直接打开播放"}"#.to_string();
-    }
-
-    let mut file = match std::fs::File::open(path_obj) {
-        Ok(f) => f,
-        Err(e) => return format!(r#"{{"url":null,"error":"{}"}}"#, e.to_string()),
-    };
-
-    let mut buf = Vec::new();
-    if let Err(e) = file.read_to_end(&mut buf) {
-        return format!(r#"{{"url":null,"error":"{}"}}"#, e.to_string());
-    }
-
-    let mime = match path_obj.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).as_deref() {
-        Some("mp4") | Some("m4v") => "video/mp4",
-        Some("webm") => "video/webm",
-        Some("mov") => "video/quicktime",
-        Some("mkv") => "video/x-matroska",
-        Some("avi") => "video/x-msvideo",
-        Some("ogv") => "video/ogg",
-        _ => "video/mp4",
-    };
-
-    let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &buf);
-
-    serde_json::json!({
-        "url": format!("data:{};base64,{}", mime, b64),
-        "error": null,
-    }).to_string()
-}
-
 fn read_pptx_content(path: &str) -> String {
     use std::io::Read;
 
@@ -704,13 +658,6 @@ pub extern "C" fn plugin_invoke(
                 .and_then(|v| v["path"].as_str().map(|s| s.to_string()))
                 .unwrap_or_default();
             read_image_as_data_url(&path)
-        }
-        "read_video" => {
-            let path = serde_json::from_str::<serde_json::Value>(args_str)
-                .ok()
-                .and_then(|v| v["path"].as_str().map(|s| s.to_string()))
-                .unwrap_or_default();
-            read_video_as_data_url(&path)
         }
         "read_file" => {
             let path = serde_json::from_str::<serde_json::Value>(args_str)
