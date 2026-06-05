@@ -833,13 +833,17 @@ html, body, #app {
 .ev-docx-render {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
   background: #fff;
 }
 
 .ev-docx-office {
-  display: block;
+  flex: 1;
+  min-height: 0;
   width: 100%;
+  position: relative;
 }
 
 .ev-docx-fallback {
@@ -896,13 +900,17 @@ html, body, #app {
 .ev-xlsx-render {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
   background: #fff;
 }
 
 .ev-xlsx-office {
-  display: block;
+  flex: 1;
+  min-height: 0;
   width: 100%;
+  position: relative;
 }
 
 .ev-xlsx-fallback {
