@@ -51,6 +51,9 @@ export function usePluginIframe(options: UsePluginIframeOptions) {
     const data = ev.data
     if (!data || typeof data !== 'object' || !data.type) return
     if (data.protocol !== 'iframe-renderer/1') return
+    if (data.type !== 'rs:resize' && data.type !== 'rs:log') {
+      console.log('[RS iframe msg]', data.type, data)
+    }
 
     const iframe = iframeRef.value
     if (!iframe || ev.source !== iframe.contentWindow) return
@@ -97,15 +100,19 @@ export function usePluginIframe(options: UsePluginIframeOptions) {
         sendBack({ ok: false, error: String(e) })
       }
     } else if (data.type === 'rs:convert-file-src') {
+      console.log('[RS] convert-file-src request:', data.path)
       const path: string = data.path
-      if (!path) return
+      if (!path) { console.warn('[RS] convert-file-src: empty path'); return }
       const sendBack = (payload: Record<string, unknown>) => {
+        console.log('[RS] convert-file-src response:', payload)
         iframe.contentWindow?.postMessage({ type: 'rs:convert-file-src:res', protocol: 'iframe-renderer/1', id: data.id, ...payload }, '*')
       }
       try {
         const url = convertFileSrc(path)
+        console.log('[RS] convertFileSrc result:', url)
         sendBack({ ok: true, url })
       } catch (e) {
+        console.error('[RS] convertFileSrc error:', e)
         sendBack({ ok: false, error: String(e) })
       }
     } else if (data.type === 'rs:invoke:req') {

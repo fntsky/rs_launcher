@@ -63,6 +63,7 @@ export interface RSApi {
   readonly query: string
   invoke<T = unknown>(command: string, args?: Record<string, unknown>): Promise<T>
   readBinary(path: string): Promise<ArrayBuffer>
+  convertFileSrc(path: string): Promise<string>
   openFile(path: string): Promise<void>
   hideWindow(): Promise<void>
   notifyBack(): void

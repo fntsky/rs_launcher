@@ -17,7 +17,6 @@
     invokeQueue: [],
     pendingInvokes: Object.create(null),
     pendingBinary: Object.create(null),
-    pendingConvertSrc: Object.create(null),
     invokeCounter: 0,
     initReceived: false,
   };
@@ -66,6 +65,30 @@
       send('rs:log', { level: levelStr, args: parts });
     } catch (_) { /* ignore */ }
   }
+
+  (function patchConsole() {
+    var origConsole = {
+      log: console.log,
+      warn: console.warn,
+      error: console.error,
+      debug: console.debug,
+    };
+    var pluginId = function () {
+      return state.context && state.context.pluginId || '?';
+    };
+    function forward(level, origFn, args) {
+      try { send('rs:log', { level: level, args: Array.prototype.map.call(args, function (a) {
+        if (a instanceof Error) return a.stack || a.message;
+        if (typeof a === 'object') { try { return JSON.stringify(a); } catch (_) { return String(a); } }
+        return String(a);
+      }) }); } catch (_) {}
+      try { origFn.apply(console, ['[plugin:' + pluginId() + ']'].concat(Array.prototype.slice.call(args))); } catch (_) {}
+    }
+    console.log = function () { forward('info', origConsole.log, arguments); };
+    console.warn = function () { forward('warn', origConsole.warn, arguments); };
+    console.error = function () { forward('error', origConsole.error, arguments); };
+    console.debug = function () { forward('debug', origConsole.debug, arguments); };
+  })();
 
   function applyTheme(theme) {
     if (!theme || typeof theme !== 'object') return;
@@ -159,22 +182,12 @@
   }
 
   function convertFileSrc(path) {
-    return new Promise(function (resolve, reject) {
-      var id = genId();
-      var done = false;
-      var timer = setTimeout(function () {
-        if (done) return;
-        done = true;
-        delete state.pendingConvertSrc[id];
-        reject(new Error('convertFileSrc timeout: ' + path));
-      }, INVOKE_TIMEOUT_MS);
-      state.pendingConvertSrc[id] = {
-        resolve: function (v) { if (done) return; done = true; clearTimeout(timer); resolve(v); },
-        reject: function (e) { if (done) return; done = true; clearTimeout(timer); reject(e); },
-        path: path,
-      };
-      send('rs:convert-file-src', { id: id, path: path });
-    });
+    var encoded = encodeURIComponent(path);
+    var isWindows = /win/i.test(navigator.platform || '');
+    var url = isWindows
+      ? 'http://rs-asset.localhost/' + encoded
+      : 'rs-asset://localhost/' + encoded;
+    return Promise.resolve(url);
   }
 
   function flushInvokeQueue() {
@@ -222,15 +235,6 @@
       delete state.pendingBinary[data.id];
       if (data.ok) pb.resolve(data.value);
       else pb.reject(new Error(data.error || 'readBinary error'));
-      return;
-    }
-
-    if (type === 'rs:convert-file-src:res') {
-      var pc = state.pendingConvertSrc[data.id];
-      if (!pc) return;
-      delete state.pendingConvertSrc[data.id];
-      if (data.ok) pc.resolve(data.url);
-      else pc.reject(new Error(data.error || 'convertFileSrc error'));
       return;
     }
 

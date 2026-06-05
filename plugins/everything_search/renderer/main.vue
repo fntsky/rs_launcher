@@ -155,18 +155,6 @@ function isVideoFile(filename: string): boolean {
   return VIDEO_EXTENSIONS.has(getFileExt(filename))
 }
 
-function getVideoMime(filename: string): string | undefined {
-  const map: Record<string, string> = {
-    mp4: 'video/mp4', m4v: 'video/mp4',
-    webm: 'video/webm',
-    mov: 'video/quicktime',
-    mkv: 'video/x-matroska',
-    avi: 'video/x-msvideo',
-    ogv: 'video/ogg',
-  }
-  return map[getFileExt(filename)]
-}
-
 function isPptxFile(filename: string): boolean {
   return PPTX_EXTENSIONS.has(getFileExt(filename))
 }
@@ -240,23 +228,6 @@ const previewDocxData = ref<{ url: string | null; title: string | null; paragrap
 const previewXlsxData = ref<{ url: string | null; sheets: number; sheetNames: string[] } | null>(null)
 const previewMdContent = ref('')
 
-let pptxBlobUrl: string | null = null
-let videoBlobUrl: string | null = null
-
-function revokePptxBlobUrl() {
-  if (pptxBlobUrl) {
-    URL.revokeObjectURL(pptxBlobUrl)
-    pptxBlobUrl = null
-  }
-}
-
-function revokeVideoBlobUrl() {
-  if (videoBlobUrl) {
-    URL.revokeObjectURL(videoBlobUrl)
-    videoBlobUrl = null
-  }
-}
-
 const loading = ref(false)
 let searchCount = 0
 
@@ -320,14 +291,10 @@ async function updatePreview() {
     previewIsDocx.value = false
     previewIsXlsx.value = false
     previewIsMd.value = false
-    revokePptxBlobUrl()
-    revokeVideoBlobUrl()
     return
   }
 
   if (isImageFile(result.subtitle)) {
-    revokePptxBlobUrl()
-    revokeVideoBlobUrl()
     previewIsVideo.value = false
     previewIsPptx.value = false
     previewIsDocx.value = false
@@ -352,19 +319,14 @@ async function updatePreview() {
   }
 
   if (isVideoFile(result.subtitle)) {
-    revokePptxBlobUrl()
-    revokeVideoBlobUrl()
     previewIsImage.value = false
     previewIsPptx.value = false
     previewIsDocx.value = false
     previewIsXlsx.value = false
     previewIsMd.value = false
     try {
-      const buf = await window.RS.readBinary(result.subtitle)
-      const mime = getVideoMime(result.subtitle) || 'video/mp4'
-      const blob = new Blob([buf], { type: mime })
-      videoBlobUrl = URL.createObjectURL(blob)
-      previewVideoUrl.value = videoBlobUrl
+      const url = await window.RS.convertFileSrc(result.subtitle)
+      previewVideoUrl.value = url
       previewIsVideo.value = true
       previewVisible.value = true
     } catch (e: any) {
@@ -374,9 +336,70 @@ async function updatePreview() {
     return
   }
 
+  if (isPptxFile(result.subtitle)) {
+    previewIsImage.value = false
+    previewIsVideo.value = false
+    previewIsPptx.value = false
+    previewIsDocx.value = false
+    previewIsXlsx.value = false
+    previewIsMd.value = false
+    try {
+      const url = await window.RS.convertFileSrc(result.subtitle)
+      const meta = await window.RS.invoke('read_pptx', { path: result.subtitle })
+      const metaData = typeof meta === 'string' ? JSON.parse(meta) : meta
+      previewPptxData.value = { url, title: metaData.title || null, slides: metaData.slides || [] }
+      previewIsPptx.value = true
+      previewVisible.value = true
+    } catch (e: any) {
+      status.value = 'PPT 加载失败: ' + (e?.message || e)
+      previewVisible.value = false
+    }
+    return
+  }
+
+  if (isDocxFile(result.subtitle)) {
+    previewIsImage.value = false
+    previewIsVideo.value = false
+    previewIsPptx.value = false
+    previewIsDocx.value = false
+    previewIsXlsx.value = false
+    previewIsMd.value = false
+    try {
+      const url = await window.RS.convertFileSrc(result.subtitle)
+      const meta = await window.RS.invoke('read_docx', { path: result.subtitle })
+      const metaData = typeof meta === 'string' ? JSON.parse(meta) : meta
+      previewDocxData.value = { url, title: metaData.title || null, paragraphs: metaData.paragraphs || 0 }
+      previewIsDocx.value = true
+      previewVisible.value = true
+    } catch (e: any) {
+      status.value = '文档加载失败: ' + (e?.message || e)
+      previewVisible.value = false
+    }
+    return
+  }
+
+  if (isXlsxFile(result.subtitle)) {
+    previewIsImage.value = false
+    previewIsVideo.value = false
+    previewIsPptx.value = false
+    previewIsDocx.value = false
+    previewIsXlsx.value = false
+    previewIsMd.value = false
+    try {
+      const url = await window.RS.convertFileSrc(result.subtitle)
+      const meta = await window.RS.invoke('read_xlsx', { path: result.subtitle })
+      const metaData = typeof meta === 'string' ? JSON.parse(meta) : meta
+      previewXlsxData.value = { url, sheets: metaData.sheets || 0, sheetNames: (metaData.sheet_names || []).slice() }
+      previewIsXlsx.value = true
+      previewVisible.value = true
+    } catch (e: any) {
+      status.value = '表格加载失败: ' + (e?.message || e)
+      previewVisible.value = false
+    }
+    return
+  }
+
   if (isMdFile(result.subtitle)) {
-    revokePptxBlobUrl()
-    revokeVideoBlobUrl()
     previewIsImage.value = false
     previewIsVideo.value = false
     previewIsPptx.value = false
@@ -400,8 +423,6 @@ async function updatePreview() {
     return
   }
 
-  revokePptxBlobUrl()
-  revokeVideoBlobUrl()
   previewIsImage.value = false
   previewIsVideo.value = false
   previewIsPptx.value = false
@@ -502,8 +523,6 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-  revokePptxBlobUrl()
-  revokeVideoBlobUrl()
   unsubQuery?.()
   unsubKey?.()
   unsubCtx?.()
