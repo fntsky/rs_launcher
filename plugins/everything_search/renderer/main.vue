@@ -1,7 +1,7 @@
 <template>
   <div class="everything-search">
     <div class="ev-main">
-      <div class="ev-results">
+      <div ref="resultsEl" class="ev-results">
         <div v-if="results.length === 0" class="ev-empty">
           {{ loading ? '搜索中...' : '输入关键词搜索文件和文件夹' }}
         </div>
@@ -22,7 +22,30 @@
           <img class="ev-image-img" :src="previewImageUrl" alt="preview" />
         </div>
       </div>
-      <div v-else-if="previewVisible && !previewIsImage" class="ev-preview ev-preview-text" v-html="previewContent">
+      <div v-else-if="previewVisible && previewIsVideo" class="ev-preview ev-preview-video">
+        <video class="ev-video" :src="previewVideoUrl" controls autoplay muted />
+      </div>
+      <div v-else-if="previewVisible && previewIsPptx && previewPptxData" class="ev-preview ev-preview-pptx">
+        <div class="ev-pptx-header">
+          <span class="ev-pptx-title">{{ previewPptxData.title || '未命名演示文稿' }}</span>
+          <span class="ev-pptx-count">{{ previewPptxData.slides.length }} 张幻灯片</span>
+        </div>
+        <div v-if="previewPptxData.url" class="ev-pptx-render">
+          <VueOfficePptx
+            :src="previewPptxData.url"
+            class="ev-pptx-office"
+            @rendered="onPptxRendered"
+            @error="onPptxError"
+          />
+        </div>
+        <div v-else class="ev-pptx-slides">
+          <div v-for="slide in previewPptxData.slides" :key="slide.index" class="ev-pptx-slide">
+            <div class="ev-pptx-slide-num">第 {{ slide.index }} 页</div>
+            <div class="ev-pptx-slide-text">{{ slide.text || '(空白页)' }}</div>
+          </div>
+        </div>
+      </div>
+      <div v-else-if="previewVisible && !previewIsImage && !previewIsVideo && !previewIsPptx" class="ev-preview ev-preview-text" v-html="previewContent">
       </div>
       <div class="ev-file-info">
         <div v-if="currentResult?.size">
@@ -42,9 +65,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import hljs from 'highlight.js/lib/common'
 import 'highlight.js/styles/github-dark.css'
+import VueOfficePptx from '@vue-office/pptx'
 import type { RSKeyEvent } from './rs-sdk'
 
 const TEXT_EXTENSIONS = new Set([
@@ -60,6 +84,14 @@ const IMAGE_EXTENSIONS = new Set([
   'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'tif',
 ])
 
+const VIDEO_EXTENSIONS = new Set([
+  'mp4', 'm4v', 'webm', 'mov', 'mkv', 'avi', 'ogv',
+])
+
+const PPTX_EXTENSIONS = new Set([
+  'pptx', 'ppt',
+])
+
 function getFileExt(filename: string): string {
   const idx = filename.lastIndexOf('.')
   return idx > 0 ? filename.slice(idx + 1).toLowerCase() : ''
@@ -71,6 +103,14 @@ function isTextFile(filename: string): boolean {
 
 function isImageFile(filename: string): boolean {
   return IMAGE_EXTENSIONS.has(getFileExt(filename))
+}
+
+function isVideoFile(filename: string): boolean {
+  return VIDEO_EXTENSIONS.has(getFileExt(filename))
+}
+
+function isPptxFile(filename: string): boolean {
+  return PPTX_EXTENSIONS.has(getFileExt(filename))
 }
 
 function getHljsLanguage(filename: string): string | undefined {
@@ -117,8 +157,22 @@ const selectedIndex = ref(-1)
 const status = ref('')
 const previewContent = ref('')
 const previewImageUrl = ref('')
+const previewVideoUrl = ref('')
 const previewVisible = ref(false)
 const previewIsImage = ref(false)
+const previewIsVideo = ref(false)
+const previewIsPptx = ref(false)
+const previewPptxData = ref<{ url: string | null; title: string | null; slides: { index: number; text: string }[] } | null>(null)
+
+let pptxBlobUrl: string | null = null
+
+function revokePptxBlobUrl() {
+  if (pptxBlobUrl) {
+    URL.revokeObjectURL(pptxBlobUrl)
+    pptxBlobUrl = null
+  }
+}
+
 const loading = ref(false)
 let searchCount = 0
 
@@ -158,13 +212,11 @@ function handleKeyDown(e: any) {
     if (results.value.length > 0) {
       e.preventDefault?.()
       selectedIndex.value = Math.min(selectedIndex.value + 1, results.value.length - 1)
-      updatePreview()
     }
   } else if (e.key === 'ArrowUp') {
     if (results.value.length > 0) {
       e.preventDefault?.()
       selectedIndex.value = Math.max(selectedIndex.value - 1, 0)
-      updatePreview()
     }
   } else if (e.key === 'Enter') {
     if (selectedIndex.value >= 0) {
@@ -178,27 +230,90 @@ async function updatePreview() {
   const result = results.value[selectedIndex.value]
   if (!result) {
     previewVisible.value = false
+    previewIsImage.value = false
+    previewIsVideo.value = false
+    previewIsPptx.value = false
+    revokePptxBlobUrl()
     return
   }
 
   if (isImageFile(result.subtitle)) {
+    revokePptxBlobUrl()
+    previewIsVideo.value = false
+    previewIsPptx.value = false
     try {
       const res = await window.RS.invoke('read_image', { path: result.subtitle })
       const data = typeof res === 'string' ? JSON.parse(res) : res
       if (data.error) {
+        status.value = data.error
         previewVisible.value = false
       } else {
         previewImageUrl.value = data.url
         previewIsImage.value = true
         previewVisible.value = true
       }
-    } catch {
+    } catch (e: any) {
+      status.value = '图片加载失败: ' + (e?.message || e)
       previewVisible.value = false
     }
     return
   }
 
+  if (isVideoFile(result.subtitle)) {
+    revokePptxBlobUrl()
+    previewIsImage.value = false
+    try {
+      const res = await window.RS.invoke('read_video', { path: result.subtitle })
+      const data = typeof res === 'string' ? JSON.parse(res) : res
+      if (data.error) {
+        status.value = data.error
+        previewVisible.value = false
+      } else {
+        previewVideoUrl.value = data.url
+        previewIsVideo.value = true
+        previewVisible.value = true
+      }
+    } catch (e: any) {
+      status.value = '视频加载失败: ' + (e?.message || e)
+      previewVisible.value = false
+    }
+    return
+  }
+
+  if (isPptxFile(result.subtitle)) {
+    previewIsImage.value = false
+    previewIsVideo.value = false
+    previewIsPptx.value = false
+    previewVisible.value = false
+    try {
+      const metaRes = await window.RS.invoke('read_pptx', { path: result.subtitle })
+      const meta = typeof metaRes === 'string' ? JSON.parse(metaRes) : metaRes
+      if (meta.error) {
+        status.value = meta.error
+        return
+      }
+      // Try visual preview via asset protocol; fall back to text-only
+      try {
+        const binaryBuf = await window.RS.readBinary(result.subtitle)
+        revokePptxBlobUrl()
+        const blob = new Blob([binaryBuf], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' })
+        pptxBlobUrl = URL.createObjectURL(blob)
+        previewPptxData.value = { url: pptxBlobUrl, title: meta.title, slides: meta.slides || [] }
+      } catch {
+        previewPptxData.value = { url: null, title: meta.title, slides: meta.slides || [] }
+      }
+      previewIsPptx.value = true
+      previewVisible.value = true
+    } catch (e: any) {
+      status.value = 'PPT 加载失败: ' + (e?.message || e)
+    }
+    return
+  }
+
+  revokePptxBlobUrl()
   previewIsImage.value = false
+  previewIsVideo.value = false
+  previewIsPptx.value = false
 
   if (!isTextFile(result.subtitle)) {
     previewVisible.value = false
@@ -212,7 +327,6 @@ async function updatePreview() {
       previewVisible.value = false
     } else {
       previewContent.value = highlightCode(data.content, result.subtitle)
-      previewIsImage.value = false
       previewVisible.value = true
     }
   } catch {
@@ -232,7 +346,24 @@ function onItemClick(index: number) {
   updatePreview()
 }
 
-watch(() => selectedIndex.value, () => updatePreview())
+function onPptxRendered() {
+  console.log('[pptx] rendered')
+}
+
+function onPptxError(e: unknown) {
+  console.error('[pptx] render error', e)
+  status.value = 'PPT 渲染失败: ' + (e instanceof Error ? e.message : String(e))
+}
+
+const resultsEl = ref<HTMLElement | null>(null)
+
+watch(() => selectedIndex.value, async () => {
+  status.value = ''
+  await nextTick()
+  const el = resultsEl.value?.querySelector('.ev-item.selected') as HTMLElement | null
+  el?.scrollIntoView({ block: 'nearest', behavior: 'auto' })
+  updatePreview()
+})
 
 let unsubQuery: (() => void) | null = null
 let unsubKey: (() => void) | null = null
@@ -267,6 +398,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  revokePptxBlobUrl()
   unsubQuery?.()
   unsubKey?.()
   unsubCtx?.()
@@ -434,6 +566,127 @@ html, body, #app {
   object-fit: contain;
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.ev-preview-video {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  padding: 8px;
+  min-height: 200px;
+  border-radius: 6px;
+}
+
+.ev-video {
+  max-width: 100%;
+  max-height: 400px;
+  width: 100%;
+  border-radius: 4px;
+  outline: none;
+}
+
+.ev-preview-pptx {
+  padding: 0;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.ev-pptx-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--divider, #3a3a42);
+  background: var(--bg-primary, #16161a);
+}
+
+.ev-pptx-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+
+.ev-pptx-count {
+  font-size: 11px;
+  color: var(--text-hint, #888);
+  flex-shrink: 0;
+  padding: 2px 8px;
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+  border-radius: 10px;
+}
+
+.ev-pptx-slides {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.ev-pptx-render {
+  height: 360px;
+  overflow-y: auto;
+  background: #f5f5f5;
+}
+
+.ev-pptx-office {
+  display: block;
+  width: 100%;
+  min-height: 360px;
+}
+
+.ev-pptx-slide {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--divider, rgba(255, 255, 255, 0.04));
+}
+
+.ev-pptx-slide:last-child {
+  border-bottom: none;
+}
+
+.ev-pptx-slide-num {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-hint, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.ev-pptx-slide-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-primary, #e0e0e0);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ev-pptx-slides::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ev-pptx-slides::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ev-pptx-slides::-webkit-scrollbar-thumb {
+  background: var(--divider, #3a3a42);
+  border-radius: 3px;
+}
+
+.ev-pptx-slides::-webkit-scrollbar-thumb:hover {
+  background: var(--text-hint, #888);
+}
+
+.ev-pptx-slides {
+  scrollbar-width: thin;
+  scrollbar-color: var(--divider, #3a3a42) transparent;
 }
 
 .ev-file-info {

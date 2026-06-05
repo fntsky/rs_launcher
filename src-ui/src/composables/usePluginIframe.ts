@@ -21,7 +21,7 @@ export interface UsePluginIframeOptions {
 
 export function usePluginIframe(options: UsePluginIframeOptions) {
   const { iframeRef, pluginId } = options
-  const { invoke, getCurrentWindow } = useTauri()
+  const { invoke, convertFileSrc, getCurrentWindow } = useTauri()
   const theme = useTheme()
 
   const ready = ref(false)
@@ -74,6 +74,28 @@ export function usePluginIframe(options: UsePluginIframeOptions) {
       }, '*')
     } else if (data.type === 'rs:ready') {
       ready.value = true
+    } else if (data.type === 'rs:read-binary') {
+      const path: string = data.path
+      if (!path) return
+      const sendBack = (payload: Record<string, unknown>) => {
+        iframe.contentWindow?.postMessage({ type: 'rs:read-binary:res', protocol: 'iframe-renderer/1', id: data.id, ...payload }, '*')
+      }
+      try {
+        const assetUrl = convertFileSrc(path)
+        fetch(assetUrl)
+          .then((resp) => {
+            if (!resp.ok) throw new Error('fetch failed: ' + resp.status)
+            return resp.arrayBuffer()
+          })
+          .then((buf) => {
+            sendBack({ ok: true, value: buf })
+          })
+          .catch((e) => {
+            sendBack({ ok: false, error: String(e?.message || e) })
+          })
+      } catch (e) {
+        sendBack({ ok: false, error: String(e) })
+      }
     } else if (data.type === 'rs:invoke:req') {
       invoke<string>('plugin_invoke', {
         pluginId: init.plugin_id,

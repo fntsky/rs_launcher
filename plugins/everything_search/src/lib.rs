@@ -385,6 +385,201 @@ fn read_image_as_data_url(path: &str) -> String {
     }).to_string()
 }
 
+fn read_video_as_data_url(path: &str) -> String {
+    use std::io::Read;
+
+    let path_obj = std::path::Path::new(path);
+    if !path_obj.exists() {
+        return r#"{"url":null,"error":"file not found"}"#.to_string();
+    }
+
+    let metadata = match std::fs::metadata(path_obj) {
+        Ok(m) => m,
+        Err(e) => return format!(r#"{{"url":null,"error":"{}"}}"#, e.to_string()),
+    };
+
+    // 30MB limit for video preview (base64 inflates ~33% + IPC copy)
+    if metadata.len() > 30 * 1024 * 1024 {
+        return r#"{"url":null,"error":"视频文件过大 (>30MB)，请直接打开播放"}"#.to_string();
+    }
+
+    let mut file = match std::fs::File::open(path_obj) {
+        Ok(f) => f,
+        Err(e) => return format!(r#"{{"url":null,"error":"{}"}}"#, e.to_string()),
+    };
+
+    let mut buf = Vec::new();
+    if let Err(e) = file.read_to_end(&mut buf) {
+        return format!(r#"{{"url":null,"error":"{}"}}"#, e.to_string());
+    }
+
+    let mime = match path_obj.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).as_deref() {
+        Some("mp4") | Some("m4v") => "video/mp4",
+        Some("webm") => "video/webm",
+        Some("mov") => "video/quicktime",
+        Some("mkv") => "video/x-matroska",
+        Some("avi") => "video/x-msvideo",
+        Some("ogv") => "video/ogg",
+        _ => "video/mp4",
+    };
+
+    let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &buf);
+
+    serde_json::json!({
+        "url": format!("data:{};base64,{}", mime, b64),
+        "error": null,
+    }).to_string()
+}
+
+fn read_pptx_content(path: &str) -> String {
+    use std::io::Read;
+
+    let path_obj = std::path::Path::new(path);
+    if !path_obj.exists() {
+        return r#"{"slide_count":0,"title":null,"slides":[],"error":"file not found"}"#.to_string();
+    }
+
+    let ext = path_obj.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    if ext == "ppt" {
+        return r#"{"slide_count":0,"title":null,"slides":[],"error":"旧版 .ppt 二进制格式不支持预览，请直接打开"}"#.to_string();
+    }
+
+    let metadata = match std::fs::metadata(path_obj) {
+        Ok(m) => m,
+        Err(e) => return format!(r#"{{"slide_count":0,"title":null,"slides":[],"error":"{}"}}"#, e.to_string()),
+    };
+
+    // 20MB hard limit for unzipping PPTX
+    if metadata.len() > 20 * 1024 * 1024 {
+        return r#"{"slide_count":0,"title":null,"slides":[],"error":"文件过大 (>20MB)，暂不支持预览"}"#.to_string();
+    }
+
+    let file = match std::fs::File::open(path_obj) {
+        Ok(f) => f,
+        Err(e) => return format!(r#"{{"url":null,"slide_count":0,"title":null,"slides":[],"error":"{}"}}"#, e.to_string()),
+    };
+
+    let mut archive = match zip::ZipArchive::new(file) {
+        Ok(a) => a,
+        Err(e) => return format!(r#"{{"url":null,"slide_count":0,"title":null,"slides":[],"error":"打开 pptx 失败: {}"}}"#, e.to_string()),
+    };
+
+    // Try to extract presentation title from core.xml
+    let mut title: Option<String> = None;
+    if let Ok(mut core) = archive.by_name("docProps/core.xml") {
+        let mut s = String::new();
+        if core.read_to_string(&mut s).is_ok() {
+            // Look for <dc:title>...</dc:title>
+            if let Some(start) = s.find("<dc:title>") {
+                let after = start + "<dc:title>".len();
+                if let Some(end) = s[after..].find("</dc:title>") {
+                    title = Some(unescape_xml(&s[after..after + end]));
+                }
+            }
+        }
+    }
+
+    // Collect slide file names sorted by slide number
+    let mut slide_files: Vec<(u32, String)> = Vec::new();
+    for i in 0..archive.len() {
+        if let Ok(f) = archive.by_index_raw(i) {
+            let name = f.name().to_string();
+            if let Some(rest) = name.strip_prefix("ppt/slides/slide") {
+                if let Some(stripped) = rest.strip_suffix(".xml") {
+                    if let Ok(n) = stripped.parse::<u32>() {
+                        slide_files.push((n, name));
+                    }
+                }
+            }
+        }
+    }
+    slide_files.sort_by_key(|(n, _)| *n);
+
+    let mut slides: Vec<serde_json::Value> = Vec::new();
+    for (idx, name) in &slide_files {
+        let mut xml = String::new();
+        if let Ok(mut f) = archive.by_name(name) {
+            let _ = f.read_to_string(&mut xml);
+        }
+        let text = extract_text_from_slide_xml(&xml);
+        slides.push(serde_json::json!({
+            "index": idx,
+            "text": text,
+        }));
+    }
+
+    serde_json::json!({
+        "slide_count": slide_files.len(),
+        "title": title,
+        "slides": slides,
+        "error": null,
+    }).to_string()
+}
+
+fn unescape_xml(s: &str) -> String {
+    s.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+}
+
+fn extract_text_from_slide_xml(xml: &str) -> String {
+    // PowerPoint stores text inside <a:t>...</a:t> runs.
+    // A slide typically has: <p:sp>...<p:txBody>...<a:p>...<a:r>...<a:t>TEXT</a:t>...</a:r>...</a:p>...</p:txBody>...</p:sp>
+    // We extract all <a:t> contents in order, with line breaks between <a:p> paragraphs.
+    let mut out = String::new();
+    let bytes = xml.as_bytes();
+    let mut i = 0;
+    let mut in_para = false;
+    let mut para_has_text = false;
+
+    while i < bytes.len() {
+        if i + 4 <= bytes.len() && &bytes[i..i + 4] == b"<a:p" {
+            // opening paragraph
+            if !out.is_empty() && para_has_text {
+                out.push('\n');
+                out.push('\n');
+            }
+            in_para = true;
+            para_has_text = false;
+            // skip to end of opening tag
+            if let Some(end) = xml[i..].find('>') {
+                i += end + 1;
+            } else {
+                break;
+            }
+            continue;
+        }
+        if i + 6 <= bytes.len() && &bytes[i..i + 6] == b"</a:p>" {
+            in_para = false;
+            i += 6;
+            continue;
+        }
+        if i + 4 <= bytes.len() && &bytes[i..i + 4] == b"<a:t" {
+            // find end of opening tag (could have attributes)
+            if let Some(gt_rel) = xml[i..].find('>') {
+                let text_start = i + gt_rel + 1;
+                if let Some(close_rel) = xml[text_start..].find("</a:t>") {
+                    let text_end = text_start + close_rel;
+                    let raw = &xml[text_start..text_end];
+                    let text = unescape_xml(raw);
+                    if para_has_text && !text.is_empty() && !out.ends_with('\n') {
+                        out.push('\n');
+                    }
+                    out.push_str(&text);
+                    para_has_text = true;
+                    i = text_end + "</a:t>".len();
+                    continue;
+                }
+            }
+        }
+        i += 1;
+        let _ = in_para; // suppress unused warning
+    }
+    out
+}
+
 fn read_file_content(path: &str) -> String {
     use std::io::Read;
 
@@ -510,12 +705,26 @@ pub extern "C" fn plugin_invoke(
                 .unwrap_or_default();
             read_image_as_data_url(&path)
         }
+        "read_video" => {
+            let path = serde_json::from_str::<serde_json::Value>(args_str)
+                .ok()
+                .and_then(|v| v["path"].as_str().map(|s| s.to_string()))
+                .unwrap_or_default();
+            read_video_as_data_url(&path)
+        }
         "read_file" => {
             let path = serde_json::from_str::<serde_json::Value>(args_str)
                 .ok()
                 .and_then(|v| v["path"].as_str().map(|s| s.to_string()))
                 .unwrap_or_default();
             read_file_content(&path)
+        }
+        "read_pptx" => {
+            let path = serde_json::from_str::<serde_json::Value>(args_str)
+                .ok()
+                .and_then(|v| v["path"].as_str().map(|s| s.to_string()))
+                .unwrap_or_default();
+            read_pptx_content(&path)
         }
         _ => r#"{"error":"unknown command"}"#.to_string(),
     };

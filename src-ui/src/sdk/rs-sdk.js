@@ -16,6 +16,7 @@
     listeners: Object.create(null),
     invokeQueue: [],
     pendingInvokes: Object.create(null),
+    pendingBinary: Object.create(null),
     invokeCounter: 0,
     initReceived: false,
   };
@@ -137,6 +138,25 @@
     });
   }
 
+  function readBinary(path) {
+    return new Promise(function (resolve, reject) {
+      var id = genId();
+      var done = false;
+      var timer = setTimeout(function () {
+        if (done) return;
+        done = true;
+        delete state.pendingBinary[id];
+        reject(new Error('readBinary timeout: ' + path));
+      }, INVOKE_TIMEOUT_MS);
+      state.pendingBinary[id] = {
+        resolve: function (v) { if (done) return; done = true; clearTimeout(timer); resolve(v); },
+        reject: function (e) { if (done) return; done = true; clearTimeout(timer); reject(e); },
+        path: path,
+      };
+      send('rs:read-binary', { id: id, path: path });
+    });
+  }
+
   function flushInvokeQueue() {
     var ids = state.invokeQueue;
     state.invokeQueue = [];
@@ -173,6 +193,15 @@
       delete state.pendingInvokes[data.id];
       if (data.ok) p.resolve(data.value);
       else p.reject(new Error(data.error || 'invoke error'));
+      return;
+    }
+
+    if (type === 'rs:read-binary:res') {
+      var pb = state.pendingBinary[data.id];
+      if (!pb) return;
+      delete state.pendingBinary[data.id];
+      if (data.ok) pb.resolve(data.value);
+      else pb.reject(new Error(data.error || 'readBinary error'));
       return;
     }
 
@@ -260,6 +289,7 @@
     get theme() { return state.theme; },
     get query() { return state.query; },
     invoke: invoke,
+    readBinary: readBinary,
     openFile: openFile,
     hideWindow: hideWindow,
     notifyBack: notifyBack,

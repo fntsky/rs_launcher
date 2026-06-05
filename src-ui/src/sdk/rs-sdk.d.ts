@@ -61,6 +61,7 @@ export interface RSApi {
   readonly theme: RSTheme | null;
   readonly query: string;
   invoke<T = unknown>(command: string, args?: Record<string, unknown>): Promise<T>;
+  readBinary(path: string): Promise<ArrayBuffer>;
   openFile(path: string): Promise<void>;
   hideWindow(): Promise<void>;
   notifyBack(): void;

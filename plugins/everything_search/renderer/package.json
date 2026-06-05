@@ -7,8 +7,10 @@
     "build": "vue-tsc --noEmit && vite build"
   },
   "dependencies": {
+    "@vue-office/pptx": "^1.0.1",
     "highlight.js": "^11.11.1",
-    "vue": "^3.4.0"
+    "vue": "^3.4.0",
+    "vue-demi": "^0.14.6"
   },
   "devDependencies": {
     "@types/node": "^20.19.41",
