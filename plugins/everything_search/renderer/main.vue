@@ -484,7 +484,7 @@ html, body, #app {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 8px 0;
 }
 
@@ -549,14 +549,15 @@ html, body, #app {
 }
 
 .ev-preview {
-  flex-shrink: 0;
+  flex: 1;
   min-height: 0;
-  overflow: visible;
+  overflow: hidden;
   margin: 4px 8px;
   border-radius: 6px;
 }
 
 .ev-preview-text {
+  overflow-y: auto;
   padding: 8px 12px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
@@ -611,12 +612,15 @@ html, body, #app {
 
 .ev-preview-pptx {
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
   background: var(--bg-secondary);
   border-radius: 6px;
-  overflow: hidden;
 }
 
 .ev-pptx-header {
+  flex-shrink: 0;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -629,7 +633,7 @@ html, body, #app {
 .ev-pptx-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-primary, #e0e0e0);
+  color: #f0f0f0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -639,26 +643,26 @@ html, body, #app {
 
 .ev-pptx-count {
   font-size: 11px;
-  color: var(--text-hint, #888);
-  flex-shrink: 0;
   padding: 2px 8px;
   background: var(--bg-hover, rgba(255, 255, 255, 0.06));
   border-radius: 10px;
 }
 
 .ev-pptx-slides {
-  max-height: 360px;
-  overflow-y: auto;
   padding: 4px 0;
 }
 
 .ev-pptx-render {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
   background: #f5f5f5;
 }
 
 .ev-pptx-office {
   display: block;
   width: 100%;
+  height: 100%;
 }
 
 .ev-pptx-slide {
@@ -687,28 +691,6 @@ html, body, #app {
   word-break: break-word;
 }
 
-.ev-pptx-slides::-webkit-scrollbar {
-  width: 6px;
-}
-
-.ev-pptx-slides::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.ev-pptx-slides::-webkit-scrollbar-thumb {
-  background: var(--divider, #3a3a42);
-  border-radius: 3px;
-}
-
-.ev-pptx-slides::-webkit-scrollbar-thumb:hover {
-  background: var(--text-hint, #888);
-}
-
-.ev-pptx-slides {
-  scrollbar-width: thin;
-  scrollbar-color: var(--divider, #3a3a42) transparent;
-}
-
 .ev-file-info {
   flex-shrink: 0;
   padding: 12px 16px;
@@ -732,29 +714,29 @@ html, body, #app {
 .ev-info-value:last-child { margin-bottom: 0; }
 
 .ev-results::-webkit-scrollbar,
-.ev-sidebar::-webkit-scrollbar {
+.ev-preview::-webkit-scrollbar {
   width: 6px;
 }
 
 .ev-results::-webkit-scrollbar-track,
-.ev-sidebar::-webkit-scrollbar-track {
+.ev-preview::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .ev-results::-webkit-scrollbar-thumb,
-.ev-sidebar::-webkit-scrollbar-thumb {
+.ev-preview::-webkit-scrollbar-thumb {
   background: var(--divider);
   border-radius: 3px;
   transition: background 0.15s;
 }
 
 .ev-results::-webkit-scrollbar-thumb:hover,
-.ev-sidebar::-webkit-scrollbar-thumb:hover {
+.ev-preview::-webkit-scrollbar-thumb:hover {
   background: var(--text-hint);
 }
 
 .ev-results,
-.ev-sidebar {
+.ev-preview {
   scrollbar-width: thin;
   scrollbar-color: var(--divider) transparent;
 }
