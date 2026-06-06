@@ -1,7 +1,7 @@
 <template>
   <div class="plugin-renderer">
     <iframe
-      v-if="pluginId"
+      v-if="pluginId && !error"
       ref="iframeRef"
       class="plugin-iframe"
       sandbox="allow-scripts allow-forms"

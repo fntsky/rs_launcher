@@ -12,11 +12,15 @@ pub struct PluginManifest {
     pub description: String,
     #[serde(default)]
     pub author: String,
-    pub dll: String,
+    pub entry: String,
     #[serde(default)]
     pub renderer: Option<String>,
     #[serde(default)]
     pub commands: Vec<CommandDef>,
+    #[serde(default)]
+    pub api_version: Option<String>,
+    #[serde(default)]
+    pub min_launcher_version: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -34,7 +38,7 @@ pub struct CommandDef {
 pub struct ScannedPlugin {
     pub manifest: PluginManifest,
     pub plugin_dir: PathBuf,
-    pub dll_path: PathBuf,
+    pub entry_path: PathBuf,
     pub renderer_path: Option<PathBuf>,
 }
 
@@ -54,8 +58,8 @@ impl PluginManifest {
         if manifest.version.is_empty() {
             return Err("plugin.json 缺少 version 字段".to_string());
         }
-        if manifest.dll.is_empty() {
-            return Err("plugin.json 缺少 dll 字段".to_string());
+        if manifest.entry.is_empty() {
+            return Err("plugin.json 缺少 entry 字段".to_string());
         }
 
         Ok(manifest)
@@ -67,11 +71,11 @@ impl ScannedPlugin {
         let manifest_path = dir.join("plugin.json");
         let manifest = PluginManifest::from_file(&manifest_path)?;
 
-        let dll_path = dir.join(&manifest.dll);
-        if !dll_path.exists() {
+        let entry_path = dir.join(&manifest.entry);
+        if !entry_path.exists() {
             return Err(format!(
-                "DLL 文件不存在: {}",
-                dll_path.display()
+                "入口文件不存在: {}",
+                entry_path.display()
             ));
         }
 
@@ -80,7 +84,7 @@ impl ScannedPlugin {
         Ok(Self {
             manifest,
             plugin_dir: dir.to_path_buf(),
-            dll_path,
+            entry_path,
             renderer_path,
         })
     }
@@ -98,7 +102,7 @@ mod tests {
             "version": "1.0.0",
             "description": "描述",
             "author": "作者",
-            "dll": "test_plugin.dll",
+            "entry": "test_plugin.dll",
             "renderer": "renderer/index.html",
             "commands": [{"name": "greet", "params": ["name"], "description": "打招呼"}]
         }"#;
@@ -107,7 +111,7 @@ mod tests {
         assert_eq!(m.id, "test_plugin");
         assert_eq!(m.name, "测试插件");
         assert_eq!(m.version, "1.0.0");
-        assert_eq!(m.dll, "test_plugin.dll");
+        assert_eq!(m.entry, "test_plugin.dll");
         assert!(m.renderer.is_some());
         assert_eq!(m.commands.len(), 1);
         assert_eq!(m.commands[0].name, "greet");
@@ -119,7 +123,7 @@ mod tests {
             "id": "minimal",
             "name": "最小插件",
             "version": "0.1.0",
-            "dll": "minimal.dll"
+            "entry": "minimal.dll"
         }"#;
 
         let m: PluginManifest = serde_json::from_str(json).unwrap();
@@ -132,7 +136,7 @@ mod tests {
 
     #[test]
     fn reject_missing_id() {
-        let json = r#"{"name": "x", "version": "1.0.0", "dll": "x.dll"}"#;
+        let json = r#"{"name": "x", "version": "1.0.0", "entry": "x.dll"}"#;
         let m: Result<PluginManifest, _> = serde_json::from_str(json);
         assert!(m.is_err());
     }
@@ -143,7 +147,7 @@ mod tests {
         let _ = std::fs::create_dir(&dir);
         let path = dir.join("plugin.json");
 
-        // Missing dll field
+        // Missing entry field
         std::fs::write(&path, r#"{"id":"x","name":"x","version":"1.0.0"}"#).unwrap();
         let result = PluginManifest::from_file(&path);
         assert!(result.is_err());

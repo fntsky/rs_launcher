@@ -31,8 +31,8 @@ unsafe impl Sync for DynamicPlugin {}
 impl DynamicPlugin {
     pub fn load(scanned: &ScannedPlugin) -> Result<Self, String> {
         unsafe {
-            let library = Library::load_with_flags(&scanned.dll_path, 0)
-                .map_err(|e| format!("加载 DLL 失败 '{}': {}", scanned.dll_path.display(), e))?;
+            let library = Library::load_with_flags(&scanned.entry_path, 0)
+                .map_err(|e| format!("加载 DLL 失败 '{}': {}", scanned.entry_path.display(), e))?;
 
             let fn_create: FnCreate = *library
                 .get(b"plugin_create")
