@@ -18,7 +18,7 @@
       spellcheck="false"
       @input="onInput"
     />
-    <button class="icon-btn" title="Settings" @click="emit('settings')">⚙</button>
+    <button class="icon-btn" title="Settings" @click="openSettings">⚙</button>
   </div>
 </template>
 
@@ -35,6 +35,10 @@ const emit = defineEmits<{
   settings: []
   search: [query: string]
 }>()
+
+function openSettings() {
+  emit('settings')
+}
 
 const query = ref('')
 const inputRef = ref<HTMLInputElement>()

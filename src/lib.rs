@@ -3,6 +3,7 @@ mod plugin;
 mod plugins;
 mod search;
 mod icon;
+mod rs_asset;
 
 const RS_SDK_JS: &str = include_str!("../src-ui/src/sdk/rs-sdk.js");
 const IFRAME_PROTOCOL_VERSION: &str = "iframe-renderer/1";
@@ -23,6 +24,7 @@ fn center_window_top(window: &tauri::WebviewWindow) {
 use std::sync::{Arc, Mutex};
 use tauri::{Manager, State};
 use serde::Serialize;
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 use plugin::{PluginEngine, PluginRegistry, SearchResult};
 
@@ -114,6 +116,27 @@ fn get_config(state: State<'_, AppState>) -> ConfigDTO {
 }
 
 #[tauri::command]
+fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("settings") {
+        window.show().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+    } else {
+        tauri::WebviewWindowBuilder::new(
+            &app,
+            "settings",
+            tauri::WebviewUrl::App("index.html".into()),
+        )
+        .title("RS Launcher - 设置")
+        .inner_size(380.0, 240.0)
+        .resizable(false)
+        .decorations(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn save_hotkey(shortcut_str: String, app_handle: tauri::AppHandle) -> Result<(), String> {
     let app_handle_clone = app_handle.clone();
     register_shortcut_internal(&app_handle_clone, &shortcut_str)
@@ -199,49 +222,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .register_asynchronous_uri_scheme_protocol("rs-asset", |_ctx, request, responder| {
-            if request.method() == http::Method::OPTIONS {
-                responder.respond(
-                    http::Response::builder()
-                        .status(http::StatusCode::NO_CONTENT)
-                        .header("Access-Control-Allow-Origin", "*")
-                        .header("Access-Control-Allow-Methods", "GET, OPTIONS")
-                        .header("Access-Control-Allow-Headers", "*")
-                        .header("Access-Control-Max-Age", "86400")
-                        .body(Vec::<u8>::new())
-                        .unwrap(),
-                );
-                return;
-            }
-            let path_part = request.uri().path();
-            let path = percent_encoding::percent_decode_str(path_part.trim_start_matches('/'))
-                .decode_utf8_lossy()
-                .to_string();
-            eprintln!("[rs-asset] uri={} path={}", request.uri(), path);
-            match std::fs::read(&path) {
-                Ok(data) => {
-                    let mime = mime_guess::from_path(&path).first_or_octet_stream();
-                    responder.respond(
-                        http::Response::builder()
-                            .header("Access-Control-Allow-Origin", "*")
-                            .header("Access-Control-Allow-Methods", "GET, OPTIONS")
-                            .header("Access-Control-Allow-Headers", "*")
-                            .header(http::header::CONTENT_TYPE, mime.essence_str())
-                            .body(data)
-                            .unwrap(),
-                    );
-                }
-                Err(e) => {
-                    eprintln!("[rs-asset] read error: {}", e);
-                    responder.respond(
-                        http::Response::builder()
-                            .status(http::StatusCode::NOT_FOUND)
-                            .header("Access-Control-Allow-Origin", "*")
-                            .header(http::header::CONTENT_TYPE, "text/plain")
-                            .body(format!("path={} err={}", path, e).into_bytes())
-                            .unwrap(),
-                    );
-                }
-            }
+            rs_asset::handle_request(request, responder);
         })
         .manage(AppState {
             engine,
@@ -252,6 +233,7 @@ pub fn run() {
             search,
             execute_result,
             get_config,
+            open_settings_window,
             save_hotkey,
             plugin_invoke,
             get_plugin_iframe_init,
@@ -284,7 +266,9 @@ pub fn run() {
                 .tooltip("RS Launcher")
                 .on_menu_event(move |_tray, event| {
                     if event.id() == "quit" {
-                        app_handle_tray.exit(0);
+                        let _ = app_handle_tray.global_shortcut().unregister_all();
+                        app_handle_tray.cleanup_before_exit();
+                        std::process::exit(0);
                     }
                 })
                 .on_tray_icon_event(|tray, event| {
