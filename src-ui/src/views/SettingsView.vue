@@ -1,9 +1,5 @@
 <template>
   <div class="settings-window">
-    <div class="settings-header">
-      <h2>设置</h2>
-      <button class="icon-btn" @click="closeWindow">✕</button>
-    </div>
     <div class="settings-body">
       <div class="setting-group">
         <label>快捷键</label>
@@ -128,19 +124,6 @@ function handleKeyRecord(e: KeyboardEvent) {
   flex-direction: column;
 }
 
-.settings-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-
-.settings-header h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
 .settings-body {
   flex: 1;
 }
@@ -202,25 +185,10 @@ function handleKeyRecord(e: KeyboardEvent) {
   from { opacity: 0; transform: translateX(-50%) translateY(8px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
+</style>
 
-.icon-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  color: var(--text-hint);
-  font-size: 14px;
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.icon-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+<style>
+#app {
+  border-radius: 0;
 }
 </style>

@@ -1,9 +1,9 @@
 mod config;
+mod icon;
 mod plugin;
 mod plugins;
-mod search;
-mod icon;
 mod rs_asset;
+mod search;
 
 const RS_SDK_JS: &str = include_str!("../src-ui/src/sdk/rs-sdk.js");
 const IFRAME_PROTOCOL_VERSION: &str = "iframe-renderer/1";
@@ -11,7 +11,12 @@ const IFRAME_PROTOCOL_VERSION: &str = "iframe-renderer/1";
 use tauri::LogicalPosition;
 
 fn center_window_top(window: &tauri::WebviewWindow) {
-    if let Some(monitor) = window.primary_monitor().ok().flatten().or_else(|| window.available_monitors().ok().and_then(|m| m.into_iter().next())) {
+    if let Some(monitor) = window.primary_monitor().ok().flatten().or_else(|| {
+        window
+            .available_monitors()
+            .ok()
+            .and_then(|m| m.into_iter().next())
+    }) {
         let screen_size = monitor.size();
         let scale = monitor.scale_factor();
         let win_size = window.inner_size().unwrap_or_default();
@@ -21,9 +26,9 @@ fn center_window_top(window: &tauri::WebviewWindow) {
     }
 }
 
+use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use tauri::{Manager, State};
-use serde::Serialize;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 use plugin::{PluginEngine, PluginRegistry, SearchResult};
@@ -78,7 +83,12 @@ pub struct PluginIframeInit {
 
 #[tauri::command]
 fn search(query: String, state: State<'_, AppState>) -> Vec<SearchResultDTO> {
-    state.engine.query(&query).into_iter().map(|r| r.into()).collect()
+    state
+        .engine
+        .query(&query)
+        .into_iter()
+        .map(|r| r.into())
+        .collect()
 }
 
 #[tauri::command]
@@ -116,7 +126,7 @@ fn get_config(state: State<'_, AppState>) -> ConfigDTO {
 }
 
 #[tauri::command]
-fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
+async fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("settings") {
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
@@ -124,11 +134,11 @@ fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
         tauri::WebviewWindowBuilder::new(
             &app,
             "settings",
-            tauri::WebviewUrl::App("index.html".into()),
+            tauri::WebviewUrl::App("index.html#/settings".into()),
         )
         .title("RS Launcher - 设置")
-        .inner_size(380.0, 240.0)
-        .resizable(false)
+        .inner_size(420.0, 220.0)
+        .resizable(true)
         .decorations(true)
         .build()
         .map_err(|e| e.to_string())?;
@@ -145,7 +155,12 @@ fn save_hotkey(shortcut_str: String, app_handle: tauri::AppHandle) -> Result<(),
 }
 
 #[tauri::command]
-fn plugin_invoke(plugin_id: String, command: String, args: String, state: State<'_, AppState>) -> String {
+fn plugin_invoke(
+    plugin_id: String,
+    command: String,
+    args: String,
+    state: State<'_, AppState>,
+) -> String {
     match state.registry.find_dynamic(&plugin_id) {
         Some(dynamic) => match dynamic.invoke(&command, &args) {
             Ok(result) => result,
@@ -185,7 +200,10 @@ fn get_plugin_iframe_init(
     })
 }
 
-fn register_shortcut_internal(app: &tauri::AppHandle, shortcut_str: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn register_shortcut_internal(
+    app: &tauri::AppHandle,
+    shortcut_str: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
     // Unregister all existing shortcuts
@@ -195,20 +213,21 @@ fn register_shortcut_internal(app: &tauri::AppHandle, shortcut_str: &str) -> Res
     let shortcut: tauri_plugin_global_shortcut::Shortcut = shortcut_str.parse()?;
 
     let app_handle = app.clone();
-    app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
-        if event.state == ShortcutState::Pressed {
-            if let Some(window) = app_handle.get_webview_window("main") {
-                let is_visible = window.is_visible().unwrap_or(false);
-                if is_visible {
-                    let _ = window.hide();
-                } else {
-                    center_window_top(&window);
-                    let _ = window.show();
-                    let _ = window.set_focus();
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |_app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let is_visible = window.is_visible().unwrap_or(false);
+                    if is_visible {
+                        let _ = window.hide();
+                    } else {
+                        center_window_top(&window);
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
                 }
             }
-        }
-    })?;
+        })?;
 
     app.global_shortcut().register(shortcut)?;
     Ok(())
@@ -249,13 +268,16 @@ pub fn run() {
             // Try to register the configured shortcut, fallback to Ctrl+Alt+Space
             let app_handle = app.handle().clone();
             if let Err(e) = register_shortcut_internal(&app_handle, &shortcut_str) {
-                eprintln!("[LAUNCHER] Failed to register shortcut '{}': {}, trying fallback", shortcut_str, e);
+                eprintln!(
+                    "[LAUNCHER] Failed to register shortcut '{}': {}, trying fallback",
+                    shortcut_str, e
+                );
                 let _ = register_shortcut_internal(&app_handle, "Ctrl+Alt+Space");
             }
 
             // Setup system tray
-            use tauri::tray::{TrayIconBuilder, MouseButton, MouseButtonState};
             use tauri::menu::{MenuBuilder, MenuItemBuilder};
+            use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder};
 
             let quit_item = MenuItemBuilder::with_id("quit", "退出").build(app)?;
             let menu = MenuBuilder::new(app).item(&quit_item).build()?;
@@ -276,7 +298,8 @@ pub fn run() {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
                         ..
-                    } = event {
+                    } = event
+                    {
                         if let Some(window) = tray.app_handle().get_webview_window("main") {
                             center_window_top(&window);
                             let _ = window.show();
