@@ -2,13 +2,10 @@
   <div id="app">
     <SearchBar ref="searchBarRef" :show-back="!!activePlugin" @back="deactivatePlugin" @settings="openSettings"
       @search="onSearch" />
-    <SettingsView v-if="settingsOpen" embedded @close="closeSettings" />
-    <template v-else>
-      <ResultList v-if="!activePlugin && results.length > 0" :results="results" :selected-index="selectedIndex"
-        @select="selectResult" @execute="executeResult" />
-      <PluginRenderer v-if="activePlugin" ref="pluginRendererRef" :plugin-id="activePlugin" :query="query" />
-      <HintBar v-if="!activePlugin && results.length === 0 && !query" />
-    </template>
+    <ResultList v-if="!activePlugin && results.length > 0" :results="results" :selected-index="selectedIndex"
+      @select="selectResult" @execute="executeResult" />
+    <PluginRenderer v-if="activePlugin" ref="pluginRendererRef" :plugin-id="activePlugin" :query="query" />
+    <HintBar v-if="!activePlugin && results.length === 0 && !query" />
   </div>
 </template>
 
@@ -18,7 +15,6 @@ import SearchBar from '../components/SearchBar.vue'
 import ResultList from '../components/ResultList.vue'
 import PluginRenderer from '../components/PluginRenderer.vue'
 import HintBar from '../components/HintBar.vue'
-import SettingsView from './SettingsView.vue'
 import { useTauri } from '../composables/useTauri'
 import { useSearch } from '../composables/useSearch'
 import { useWindow } from '../composables/useWindow'
@@ -26,13 +22,12 @@ import type { SearchResult } from '../types'
 
 const { invoke } = useTauri()
 const { search } = useSearch()
-const { setWindowSize, setSettingsWindowSize, setPluginWindowSize, setPluginSize, hideWindow } = useWindow()
+const { setWindowSize, setPluginWindowSize, setPluginSize, hideWindow } = useWindow()
 
 const query = ref('')
 const results = ref<SearchResult[]>([])
 const selectedIndex = ref(-1)
 const activePlugin = ref<string | null>(null)
-const settingsOpen = ref(false)
 const searchBarRef = ref<InstanceType<typeof SearchBar>>()
 const pluginRendererRef = ref<InstanceType<typeof PluginRenderer>>()
 
@@ -73,18 +68,7 @@ function deactivatePlugin() {
 }
 
 function openSettings() {
-  settingsOpen.value = true
-  setSettingsWindowSize()
-}
-
-function closeSettings() {
-  settingsOpen.value = false
-  if (activePlugin.value) {
-    setPluginWindowSize()
-  } else {
-    setWindowSize(results.value.length > 0)
-  }
-  searchBarRef.value?.focus()
+  invoke('open_settings_window').catch(console.error)
 }
 
 const PLUGIN_FORWARD_KEYS = new Set([
@@ -103,13 +87,6 @@ function isPluginKey(e: KeyboardEvent): boolean {
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  if (settingsOpen.value) {
-    if (e.key === 'Escape') {
-      closeSettings()
-    }
-    return
-  }
-
   if (e.key === 'Escape') {
     if (activePlugin.value) {
       deactivatePlugin()

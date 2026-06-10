@@ -4,7 +4,6 @@ import { useTauri } from './useTauri'
 const WINDOW_WIDTH = 640
 const WINDOW_HEIGHT_COLLAPSED = 80
 const WINDOW_HEIGHT_EXPANDED = 420
-const WINDOW_HEIGHT_SETTINGS = 240
 const WINDOW_HEIGHT_PLUGIN_DEFAULT = 560
 const SEARCH_BAR_CHROME = 60
 const MIN_PLUGIN_CONTENT_HEIGHT = 300
@@ -39,15 +38,6 @@ export function useWindow() {
     }
   }
 
-  async function setSettingsWindowSize() {
-    const appWindow = getCurrentWindow()
-    try {
-      await appWindow.setSize(new LogicalSize(WINDOW_WIDTH, WINDOW_HEIGHT_SETTINGS))
-    } catch (e) {
-      console.error('Failed to set settings size:', e)
-    }
-  }
-
   async function setPluginSize(contentWidth: number, contentHeight: number) {
     const appWindow = getCurrentWindow()
     const chrome = getChromeHeight()
@@ -70,5 +60,5 @@ export function useWindow() {
     }
   }
 
-  return { setWindowSize, setSettingsWindowSize, setPluginWindowSize, setPluginSize, hideWindow }
+  return { setWindowSize, setPluginWindowSize, setPluginSize, hideWindow }
 }

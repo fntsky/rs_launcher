@@ -10,7 +10,7 @@
     "global-shortcut:allow-is-registered",
     {
       "identifier": "core:window:allow-show",
-      "windows": ["main"]
+      "windows": ["main", "settings"]
     },
     {
       "identifier": "core:window:allow-hide",
@@ -18,7 +18,7 @@
     },
     {
       "identifier": "core:window:allow-set-focus",
-      "windows": ["main"]
+      "windows": ["main", "settings"]
     },
     {
       "identifier": "core:window:allow-is-visible",

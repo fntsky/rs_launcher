@@ -5,7 +5,9 @@
   "identifier": "com.rs-launcher.app",
   "build": {
     "frontendDist": "src-ui/dist",
-    "beforeBuildCommand": "cd src-ui && npm run build"
+    "beforeBuildCommand": "cd src-ui && npm run build",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "cd src-ui && npm run dev"
   },
   "app": {
     "withGlobalTauri": true,
