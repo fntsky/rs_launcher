@@ -20,7 +20,7 @@ const DARK_THEME: RSTheme = {
     '--accent': '#0a84ff',
     '--divider': '#38383a',
     '--app-opacity': '0.75',
-    '--app-blur': '20px',
+    '--app-blur': '40px',
   },
 }
 

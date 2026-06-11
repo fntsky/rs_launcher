@@ -43,7 +43,7 @@ fn dark_theme() -> ThemeDTO {
             ("--accent".into(), "#0a84ff".into()),
             ("--divider".into(), "#38383a".into()),
             ("--app-opacity".into(), "0.75".into()),
-            ("--app-blur".into(), "20px".into()),
+            ("--app-blur".into(), "40px".into()),
         ]),
     }
 }
