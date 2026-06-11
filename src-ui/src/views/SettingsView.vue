@@ -218,8 +218,6 @@ function handleKeyRecord(e: KeyboardEvent) {
   padding: 20px;
   display: flex;
   flex-direction: column;
-  --app-opacity: 1;
-  --app-blur: 0px;
 }
 
 .setting-group {
@@ -433,10 +431,6 @@ function handleKeyRecord(e: KeyboardEvent) {
 
 <style>
 #app {
-  border-radius: 0;
-}
-
-#app::before {
   border-radius: 0;
 }
 </style>

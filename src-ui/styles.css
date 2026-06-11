@@ -12,8 +12,6 @@
   --text-hint: #636366;
   --accent: #0a84ff;
   --divider: #38383a;
-  --app-opacity: 0.6;
-  --app-blur: 0px;
   --border-radius: 12px;
   --transition-fast: 0.15s ease;
   --transition-medium: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -39,27 +37,13 @@ html, body {
 }
 
 #app {
-  position: relative;
-  isolation: isolate;
   width: 100%;
   height: 100%;
-  background: transparent;
+  background: var(--bg-primary);
   border-radius: 14px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-}
-
-#app::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--bg-primary);
-  opacity: var(--app-opacity, 1);
-  backdrop-filter: blur(var(--app-blur, 0px));
-  -webkit-backdrop-filter: blur(var(--app-blur, 0px));
-  z-index: -1;
-  border-radius: 14px;
 }
 
 /* When plugin renderer is active, make results-area fill remaining space */
