@@ -25,6 +25,7 @@ mime_guess = "2"
 dirs = "6"
 libloading = "0.8"
 raw-window-handle = "0.6"
+window-vibrancy = "0.6"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

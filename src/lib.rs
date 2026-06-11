@@ -412,6 +412,11 @@ pub fn run() {
 
             // Show main window after setup
             if let Some(window) = app.get_webview_window("main") {
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = window_vibrancy::apply_acrylic(&window, Some((28, 28, 30, 128)));
+                }
+
                 // Position window: horizontally centered, vertically at ~20% of screen
                 center_window_top(&window);
 
