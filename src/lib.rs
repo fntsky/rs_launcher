@@ -285,8 +285,8 @@ fn get_theme(theme_id: String) -> Option<theme::ThemeDTO> {
 
 #[tauri::command]
 fn set_theme(theme_id: String, state: State<'_, AppState>) -> Result<theme::ThemeDTO, String> {
-    let theme_data = theme::get_theme(&theme_id)
-        .ok_or_else(|| format!("主题不存在: {}", theme_id))?;
+    let theme_data =
+        theme::get_theme(&theme_id).ok_or_else(|| format!("主题不存在: {}", theme_id))?;
     {
         let mut cfg = state.config.lock().unwrap();
         cfg.theme = theme_id;
@@ -414,7 +414,7 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(target_os = "windows")]
                 {
-                    let _ = window_vibrancy::apply_acrylic(&window, Some((0, 0, 0, 128)));
+                    let _ = window_vibrancy::apply_mica(&window, Some(true));
                 }
 
                 // Position window: horizontally centered, vertically at ~20% of screen
