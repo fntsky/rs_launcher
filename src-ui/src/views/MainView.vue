@@ -7,7 +7,7 @@
     <PluginRenderer v-if="activePlugin" ref="pluginRendererRef" :plugin-id="activePlugin" :query="query" />
     <HintBar v-if="!activePlugin && results.length === 0 && !query" />
     <div v-if="contextMenu" class="context-menu" :style="contextMenuStyle">
-      <div v-if="contextMenu.result.plugin_id !== 'everything_search'" class="context-menu-item" @click="contextOpen">打开</div>
+      <div v-if="contextMenu.result.action !== 'open_renderer'" class="context-menu-item" @click="contextOpen">打开</div>
       <div class="context-menu-item" @click="contextOpenFileLocation">打开文件所在位置</div>
       <div class="context-menu-item" @click="contextCopyPath">复制路径</div>
       <div class="context-menu-item" @click="contextCopyName">复制文件名</div>
@@ -134,15 +134,7 @@ function contextOpen() {
 function contextOpenFileLocation() {
   const r = contextMenu.value?.result
   if (!r) return
-  if (r.plugin_id === 'everything_search') {
-    invoke('plugin_invoke', {
-      pluginId: r.plugin_id,
-      command: 'show_in_folder',
-      args: JSON.stringify({ path: r.subtitle }),
-    }).catch(console.error)
-  } else {
-    invoke('open_file_location', { path: r.subtitle }).catch(console.error)
-  }
+  invoke('open_file_location', { path: r.subtitle }).catch(console.error)
   closeContextMenu()
 }
 
