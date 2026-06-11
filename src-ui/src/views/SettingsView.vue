@@ -14,6 +14,27 @@
       </div>
 
       <div class="setting-group">
+        <label>主题</label>
+        <div class="theme-grid">
+          <div
+            v-for="theme in themes"
+            :key="theme.id"
+            class="theme-card"
+            :class="{ selected: theme.id === activeThemeId }"
+            @click="selectTheme(theme.id)"
+          >
+            <div class="theme-preview" :class="theme.mode">
+              <span class="theme-preview-bar"></span>
+            </div>
+            <div class="theme-info">
+              <span class="theme-name">{{ theme.name }}</span>
+              <span class="theme-mode">{{ theme.mode === 'dark' ? '暗色' : '亮色' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="setting-group">
         <label>插件 ({{ plugins.length }})</label>
         <div class="plugin-list">
           <div
@@ -47,6 +68,11 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { emit as tauriEmit } from '@tauri-apps/api/event'
+import { useTheme } from '../composables/useTheme'
+import type { ThemeInfo, ThemeDTO, AppConfig } from '../types'
+
+const theme = useTheme()
 
 const isRecording = ref(false)
 const hotkeyDisplay = ref('Ctrl+Alt+Space')
@@ -67,6 +93,20 @@ interface PluginInfo {
 
 const plugins = ref<PluginInfo[]>([])
 
+const themes = ref<ThemeInfo[]>([])
+const activeThemeId = ref('dark')
+
+async function selectTheme(themeId: string) {
+  try {
+    const t = await invoke<ThemeDTO>('set_theme', { themeId })
+    theme.loadTheme(t)
+    activeThemeId.value = themeId
+    await tauriEmit('theme-changed', { themeId })
+  } catch (e) {
+    console.error('Failed to set theme:', e)
+  }
+}
+
 async function openPluginDir(path: string) {
   await invoke('open_in_explorer', { path }).catch(console.error)
 }
@@ -75,11 +115,18 @@ let savedTimer: ReturnType<typeof setTimeout>
 
 onMounted(async () => {
   try {
-    const config = await invoke<{ hotkey_display: string }>('get_config')
+    const config = await invoke<AppConfig>('get_config')
     hotkeyDisplay.value = config.hotkey_display
     currentHotkey.value = config.hotkey_display
+    activeThemeId.value = config.theme
   } catch (e) {
     console.error('Failed to load config:', e)
+  }
+
+  try {
+    themes.value = await invoke<ThemeInfo[]>('list_themes')
+  } catch (e) {
+    console.error('Failed to load themes:', e)
   }
 
   try {
@@ -294,6 +341,72 @@ function handleKeyRecord(e: KeyboardEvent) {
 
 .plugin-author {
   font-size: 11px;
+  color: var(--text-hint);
+}
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 2px solid var(--divider);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+  overflow: hidden;
+}
+
+.theme-card:hover {
+  border-color: var(--text-secondary);
+}
+
+.theme-card.selected {
+  border-color: var(--accent);
+}
+
+.theme-preview {
+  height: 48px;
+  position: relative;
+  overflow: hidden;
+}
+
+.theme-preview.dark {
+  background: #1e1e22;
+}
+
+.theme-preview.light {
+  background: #f0f0f5;
+}
+
+.theme-preview-bar {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.theme-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+}
+
+.theme-name {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.theme-mode {
+  font-size: 10px;
   color: var(--text-hint);
 }
 

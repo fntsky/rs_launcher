@@ -4,6 +4,7 @@ mod plugin;
 mod plugins;
 mod rs_asset;
 mod search;
+mod theme;
 
 const RS_SDK_JS: &str = include_str!("../src-ui/src/sdk/rs-sdk.js");
 const IFRAME_PROTOCOL_VERSION: &str = "iframe-renderer/1";
@@ -67,6 +68,7 @@ impl From<SearchResult> for SearchResultDTO {
 #[derive(Serialize)]
 pub struct ConfigDTO {
     pub hotkey_display: String,
+    pub theme: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -133,6 +135,7 @@ fn get_config(state: State<'_, AppState>) -> ConfigDTO {
     let cfg = state.config.lock().unwrap();
     ConfigDTO {
         hotkey_display: cfg.hotkey_display(),
+        theme: cfg.theme.clone(),
     }
 }
 
@@ -261,6 +264,28 @@ fn open_in_explorer(path: String) {
     }
 }
 
+#[tauri::command]
+fn list_themes() -> Vec<theme::ThemeInfo> {
+    theme::list_themes()
+}
+
+#[tauri::command]
+fn get_theme(theme_id: String) -> Option<theme::ThemeDTO> {
+    theme::get_theme(&theme_id)
+}
+
+#[tauri::command]
+fn set_theme(theme_id: String, state: State<'_, AppState>) -> Result<theme::ThemeDTO, String> {
+    let theme_data = theme::get_theme(&theme_id)
+        .ok_or_else(|| format!("主题不存在: {}", theme_id))?;
+    {
+        let mut cfg = state.config.lock().unwrap();
+        cfg.theme = theme_id;
+        cfg.save()?;
+    }
+    Ok(theme_data)
+}
+
 fn register_shortcut_internal(
     app: &tauri::AppHandle,
     shortcut_str: &str,
@@ -319,6 +344,9 @@ pub fn run() {
             get_plugin_iframe_init,
             get_plugins,
             open_in_explorer,
+            list_themes,
+            get_theme,
+            set_theme,
         ])
         .setup(|app| {
             // Register global shortcut

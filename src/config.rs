@@ -7,6 +7,8 @@ pub struct AppConfig {
     pub hotkey_mods: u32,
     #[serde(default = "default_vk")]
     pub hotkey_vk: u32,
+    #[serde(default = "default_theme")]
+    pub theme: String,
 }
 
 fn default_mods() -> u32 {
@@ -18,11 +20,16 @@ fn default_vk() -> u32 {
     windows_sys::Win32::UI::Input::KeyboardAndMouse::VK_SPACE as u32
 }
 
+fn default_theme() -> String {
+    "dark".to_string()
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             hotkey_mods: default_mods(),
             hotkey_vk: default_vk(),
+            theme: default_theme(),
         }
     }
 }
@@ -42,6 +49,18 @@ impl AppConfig {
 
     pub fn hotkey_display(&self) -> String {
         Self::hotkey_display_from(self.hotkey_mods, self.hotkey_vk)
+    }
+
+    pub fn save(&self) -> Result<(), String> {
+        let path = Self::config_path();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("创建配置目录失败: {}", e))?;
+        }
+        let data = serde_json::to_string_pretty(self)
+            .map_err(|e| format!("序列化配置失败: {}", e))?;
+        std::fs::write(&path, data)
+            .map_err(|e| format!("写入配置失败: {}", e))
     }
 
     pub fn hotkey_display_from(mods: u32, vk: u32) -> String {

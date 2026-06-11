@@ -1,4 +1,5 @@
 import { ref, readonly, type Ref } from 'vue'
+import type { ThemeDTO } from '../types'
 
 export interface RSTheme {
   mode: 'dark' | 'light'
@@ -55,6 +56,9 @@ function createTheme() {
     current: readonly(current) as Readonly<Ref<RSTheme>>,
     setTheme,
     subscribe,
+    loadTheme(t: ThemeDTO) {
+      setTheme({ mode: t.mode as 'dark' | 'light', vars: { ...t.vars }, name: t.name })
+    },
   }
 }
 

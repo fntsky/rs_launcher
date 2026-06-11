@@ -1,0 +1,15 @@
+{
+  "name": "暗色主题",
+  "mode": "dark",
+  "vars": {
+    "--bg-primary": "#1e1e22",
+    "--bg-secondary": "#2a2a30",
+    "--bg-hover": "#3a3a42",
+    "--bg-selected": "#2a3a5a",
+    "--text-primary": "#e0e0e0",
+    "--text-secondary": "#6a6a72",
+    "--text-hint": "#585860",
+    "--accent": "#4a90d9",
+    "--divider": "#3a3a42"
+  }
+}

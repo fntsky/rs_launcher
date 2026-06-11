@@ -24,3 +24,21 @@ export interface PluginIframeInit {
   config: Record<string, unknown>
   version: string
 }
+
+export interface ThemeInfo {
+  id: string
+  name: string
+  mode: string
+}
+
+export interface ThemeDTO {
+  id: string
+  name: string
+  mode: string
+  vars: Record<string, string>
+}
+
+export interface AppConfig {
+  hotkey_display: string
+  theme: string
+}
