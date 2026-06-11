@@ -265,6 +265,15 @@ fn open_in_explorer(path: String) {
 }
 
 #[tauri::command]
+fn open_file_location(path: String) {
+    std::process::Command::new("explorer.exe")
+        .arg("/select,")
+        .arg(&path)
+        .spawn()
+        .ok();
+}
+
+#[tauri::command]
 fn list_themes() -> Vec<theme::ThemeInfo> {
     theme::list_themes()
 }
@@ -344,6 +353,7 @@ pub fn run() {
             get_plugin_iframe_init,
             get_plugins,
             open_in_explorer,
+            open_file_location,
             list_themes,
             get_theme,
             set_theme,
