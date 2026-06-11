@@ -39,7 +39,7 @@ html, body {
 #app {
   width: 100%;
   height: 100%;
-  background: transparent;
+  background: var(--bg-primary);
   border-radius: 14px;
   overflow: hidden;
   display: flex;
