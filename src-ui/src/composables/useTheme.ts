@@ -19,6 +19,8 @@ const DARK_THEME: RSTheme = {
     '--text-hint': '#636366',
     '--accent': '#0a84ff',
     '--divider': '#38383a',
+    '--app-opacity': '0.75',
+    '--app-blur': '20px',
   },
 }
 
