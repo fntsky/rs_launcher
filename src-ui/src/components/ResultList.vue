@@ -9,6 +9,7 @@
         :selected="index === selectedIndex"
         @click="emit('select', index)"
         @dblclick="emit('execute', index)"
+        @contextmenu="(e: MouseEvent) => emit('contextmenu', index, e)"
       />
     </div>
   </div>
@@ -27,5 +28,6 @@ defineProps<Props>()
 const emit = defineEmits<{
   select: [index: number]
   execute: [index: number]
+  contextmenu: [index: number, e: MouseEvent]
 }>()
 </script>

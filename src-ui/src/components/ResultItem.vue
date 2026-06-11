@@ -4,6 +4,7 @@
     :class="{ selected }"
     @click="emit('click')"
     @dblclick="emit('dblclick')"
+    @contextmenu.prevent="handleContextMenu"
   >
     <img
       v-if="isImageIcon"
@@ -34,9 +35,14 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   click: []
   dblclick: []
+  contextmenu: [e: MouseEvent]
 }>()
 
 const { convertFileSrc } = useTauri()
+
+function handleContextMenu(e: MouseEvent) {
+  emit('contextmenu', e)
+}
 
 const icon = computed(() => props.result.icon_path || '📄')
 

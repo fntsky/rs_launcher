@@ -43,4 +43,20 @@ pub trait Plugin: Send + Sync {
     fn as_dynamic(&self) -> Option<&DynamicPlugin> {
         None
     }
+
+    fn version(&self) -> &str {
+        ""
+    }
+
+    fn description(&self) -> &str {
+        ""
+    }
+
+    fn author(&self) -> &str {
+        ""
+    }
+
+    fn has_renderer(&self) -> bool {
+        false
+    }
 }

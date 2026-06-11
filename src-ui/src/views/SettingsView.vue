@@ -12,6 +12,32 @@
         </div>
         <p class="setting-hint">点击修改。按下修饰键 + 按键组合。</p>
       </div>
+
+      <div class="setting-group">
+        <label>插件 ({{ plugins.length }})</label>
+        <div class="plugin-list">
+          <div
+            v-for="plugin in plugins"
+            :key="plugin.id"
+            class="plugin-item"
+          >
+            <div class="plugin-item-header">
+              <span class="plugin-name">{{ plugin.name }}</span>
+              <span class="plugin-version">v{{ plugin.version }}</span>
+              <span v-if="plugin.has_renderer" class="plugin-badge">UI</span>
+              <button
+                v-if="plugin.dir"
+                class="plugin-folder-btn"
+                title="打开插件文件夹"
+                @click="openPluginDir(plugin.dir)"
+              >📂</button>
+            </div>
+            <p v-if="plugin.description" class="plugin-desc">{{ plugin.description }}</p>
+            <p v-if="plugin.author" class="plugin-author">{{ plugin.author }}</p>
+          </div>
+          <p v-if="plugins.length === 0" class="setting-hint">暂无插件</p>
+        </div>
+      </div>
     </div>
     <div class="saved-toast" v-if="showSaved">已保存</div>
   </div>
@@ -29,6 +55,22 @@ const currentHotkey = ref('Ctrl+Alt+Space')
 const props = defineProps<{ embedded?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
+interface PluginInfo {
+  id: string
+  name: string
+  version: string
+  description: string
+  author: string
+  has_renderer: boolean
+  dir: string
+}
+
+const plugins = ref<PluginInfo[]>([])
+
+async function openPluginDir(path: string) {
+  await invoke('open_in_explorer', { path }).catch(console.error)
+}
+
 let savedTimer: ReturnType<typeof setTimeout>
 
 onMounted(async () => {
@@ -39,6 +81,13 @@ onMounted(async () => {
   } catch (e) {
     console.error('Failed to load config:', e)
   }
+
+  try {
+    plugins.value = await invoke<PluginInfo[]>('get_plugins')
+  } catch (e) {
+    console.error('Failed to load plugins:', e)
+  }
+
   window.addEventListener('keydown', handleKeydown)
 })
 
@@ -124,19 +173,24 @@ function handleKeyRecord(e: KeyboardEvent) {
   flex-direction: column;
 }
 
-.settings-body {
-  flex: 1;
-}
-
 .setting-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
+.setting-group + .setting-group {
+  margin-top: 24px;
+}
+
 .setting-group label {
   font-size: 13px;
   color: #b0b0b8;
+}
+
+.settings-body {
+  flex: 1;
+  overflow-y: auto;
 }
 
 .hotkey-recorder {
@@ -164,6 +218,81 @@ function handleKeyRecord(e: KeyboardEvent) {
 }
 
 .setting-hint {
+  font-size: 11px;
+  color: var(--text-hint);
+}
+
+.plugin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.plugin-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  border-bottom: 2px solid var(--divider);
+}
+
+.plugin-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plugin-name {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.plugin-version {
+  font-size: 11px;
+  color: var(--text-hint);
+}
+
+.plugin-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  line-height: 16px;
+}
+
+.plugin-folder-btn {
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-hint);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.plugin-folder-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.plugin-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.plugin-author {
   font-size: 11px;
   color: var(--text-hint);
 }

@@ -31,7 +31,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{Manager, State};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
-use plugin::{PluginEngine, PluginRegistry, SearchResult};
+use plugin::{Plugin, PluginEngine, PluginRegistry, SearchResult};
 
 pub struct AppState {
     engine: Arc<PluginEngine>,
@@ -79,6 +79,17 @@ pub struct PluginIframeInit {
     pub query: String,
     pub config: serde_json::Value,
     pub version: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct PluginInfoDTO {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub author: String,
+    pub has_renderer: bool,
+    pub dir: String,
 }
 
 #[tauri::command]
@@ -137,7 +148,7 @@ async fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
             tauri::WebviewUrl::App("index.html#/settings".into()),
         )
         .title("RS Launcher - 设置")
-        .inner_size(420.0, 220.0)
+        .inner_size(420.0, 380.0)
         .resizable(true)
         .decorations(true)
         .build()
@@ -200,6 +211,56 @@ fn get_plugin_iframe_init(
     })
 }
 
+#[tauri::command]
+fn get_plugins(state: State<'_, AppState>) -> Vec<PluginInfoDTO> {
+    state
+        .registry
+        .plugins()
+        .iter()
+        .map(|p| {
+            let dir = p
+                .as_dynamic()
+                .map(|d| d.plugin_dir().to_string_lossy().to_string())
+                .unwrap_or_default();
+            PluginInfoDTO {
+                id: p.id().to_string(),
+                name: p.name().to_string(),
+                version: p.version().to_string(),
+                description: p.description().to_string(),
+                author: p.author().to_string(),
+                has_renderer: p.has_renderer(),
+                dir,
+            }
+        })
+        .collect()
+}
+
+#[tauri::command]
+fn open_in_explorer(path: String) {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    let wide_path: Vec<u16> = OsStr::new(&path)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let wide_verb: Vec<u16> = OsStr::new("explore")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    unsafe {
+        windows_sys::Win32::UI::Shell::ShellExecuteW(
+            std::ptr::null_mut(),
+            wide_verb.as_ptr(),
+            wide_path.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOW,
+        );
+    }
+}
+
 fn register_shortcut_internal(
     app: &tauri::AppHandle,
     shortcut_str: &str,
@@ -256,6 +317,8 @@ pub fn run() {
             save_hotkey,
             plugin_invoke,
             get_plugin_iframe_init,
+            get_plugins,
+            open_in_explorer,
         ])
         .setup(|app| {
             // Register global shortcut

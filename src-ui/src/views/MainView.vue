@@ -3,14 +3,19 @@
     <SearchBar ref="searchBarRef" :show-back="!!activePlugin" @back="deactivatePlugin" @settings="openSettings"
       @search="onSearch" />
     <ResultList v-if="!activePlugin && results.length > 0" :results="results" :selected-index="selectedIndex"
-      @select="selectResult" @execute="executeResult" />
+      @select="selectResult" @execute="executeResult" @contextmenu="showContextMenu" />
     <PluginRenderer v-if="activePlugin" ref="pluginRendererRef" :plugin-id="activePlugin" :query="query" />
     <HintBar v-if="!activePlugin && results.length === 0 && !query" />
+    <div v-if="contextMenu" class="context-menu" :style="contextMenuStyle">
+      <div class="context-menu-item" @click="contextOpenFileLocation">打开文件所在位置</div>
+      <div class="context-menu-item" @click="contextCopyPath">复制路径</div>
+      <div class="context-menu-item" @click="contextCopyName">复制文件名</div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import SearchBar from '../components/SearchBar.vue'
 import ResultList from '../components/ResultList.vue'
 import PluginRenderer from '../components/PluginRenderer.vue'
@@ -20,7 +25,7 @@ import { useSearch } from '../composables/useSearch'
 import { useWindow } from '../composables/useWindow'
 import type { SearchResult } from '../types'
 
-const { invoke } = useTauri()
+const { invoke, getCurrentWindow } = useTauri()
 const { search } = useSearch()
 const { setWindowSize, setPluginWindowSize, setPluginSize, hideWindow } = useWindow()
 
@@ -30,6 +35,24 @@ const selectedIndex = ref(-1)
 const activePlugin = ref<string | null>(null)
 const searchBarRef = ref<InstanceType<typeof SearchBar>>()
 const pluginRendererRef = ref<InstanceType<typeof PluginRenderer>>()
+
+interface ContextMenu {
+  x: number
+  y: number
+  result: SearchResult
+}
+const contextMenu = ref<ContextMenu | null>(null)
+const contextMenuStyle = computed(() => {
+  if (!contextMenu.value) return {}
+  const pad = 8
+  const w = 180
+  const h = 108
+  let x = contextMenu.value.x
+  let y = contextMenu.value.y
+  if (x + w > window.innerWidth - pad) x = window.innerWidth - w - pad
+  if (y + h > window.innerHeight - pad) y = window.innerHeight - h - pad
+  return { left: `${Math.max(pad, x)}px`, top: `${Math.max(pad, y)}px` }
+})
 
 async function onSearch(q: string) {
   query.value = q
@@ -71,6 +94,61 @@ function openSettings() {
   invoke('open_settings_window').catch(console.error)
 }
 
+function showContextMenu(index: number, e: MouseEvent) {
+  const result = results.value[index]
+  if (!result) return
+  contextMenu.value = { x: e.clientX, y: e.clientY, result }
+}
+
+function closeContextMenu() {
+  contextMenu.value = null
+}
+
+function onDocumentClick(e: MouseEvent) {
+  const el = e.target as HTMLElement
+  if (!el.closest('.context-menu')) {
+    closeContextMenu()
+  }
+}
+
+watch(contextMenu, (val) => {
+  if (val) {
+    setTimeout(() => document.addEventListener('click', onDocumentClick), 0)
+  } else {
+    document.removeEventListener('click', onDocumentClick)
+  }
+})
+
+let autoHideReady = false
+let focusGainTimer: ReturnType<typeof setTimeout>
+let unlistenFocus: (() => void) | null = null
+
+function contextOpenFileLocation() {
+  const r = contextMenu.value?.result
+  if (!r) return
+  invoke('plugin_invoke', {
+    pluginId: r.plugin_id,
+    command: 'show_in_folder',
+    args: JSON.stringify({ path: r.subtitle }),
+  }).catch(console.error)
+  closeContextMenu()
+}
+
+function contextCopyPath() {
+  const path = contextMenu.value?.result.subtitle
+  if (path) navigator.clipboard.writeText(path).catch(console.error)
+  closeContextMenu()
+}
+
+function contextCopyName() {
+  const path = contextMenu.value?.result.subtitle
+  if (path) {
+    const name = path.split('\\').pop() || path.split('/').pop() || path
+    navigator.clipboard.writeText(name).catch(console.error)
+  }
+  closeContextMenu()
+}
+
 const PLUGIN_FORWARD_KEYS = new Set([
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
   'Enter', 'Tab',
@@ -88,6 +166,10 @@ function isPluginKey(e: KeyboardEvent): boolean {
 
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
+    if (contextMenu.value) {
+      closeContextMenu()
+      return
+    }
     if (activePlugin.value) {
       deactivatePlugin()
       return
@@ -133,6 +215,17 @@ onMounted(async () => {
   window.addEventListener('rs-plugin-back', onPluginBack as EventListener)
   window.addEventListener('rs-plugin-resize', onPluginResize as EventListener)
 
+  const appWindow = getCurrentWindow()
+  unlistenFocus = await appWindow.onFocusChanged(({ payload: focused }) => {
+    if (focused) {
+      clearTimeout(focusGainTimer)
+      focusGainTimer = setTimeout(() => { autoHideReady = true }, 200)
+    } else if (autoHideReady && !query.value && !activePlugin.value) {
+      hideWindow()
+      autoHideReady = false
+    }
+  })
+
   results.value = await search('')
   selectedIndex.value = results.value.length > 0 ? 0 : -1
   if (results.value.length > 0) {
@@ -156,5 +249,35 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
   window.removeEventListener('rs-plugin-back', onPluginBack as EventListener)
   window.removeEventListener('rs-plugin-resize', onPluginResize as EventListener)
+  document.removeEventListener('click', onDocumentClick)
+  if (unlistenFocus) unlistenFocus()
+  clearTimeout(focusGainTimer)
 })
 </script>
+
+<style scoped>
+.context-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 170px;
+  background: var(--bg-primary);
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  padding: 4px;
+}
+
+.context-menu-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  white-space: nowrap;
+}
+
+.context-menu-item:hover {
+  background: var(--bg-hover);
+}
+</style>

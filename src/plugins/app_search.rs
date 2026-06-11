@@ -5,10 +5,12 @@ use crate::icon;
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock, atomic::{AtomicBool, Ordering}};
 
 /// 应用搜索插件 — 扫描 Windows 开始菜单快捷方式
 pub struct AppSearchPlugin {
-    apps: Vec<AppEntry>,
+    apps: Arc<RwLock<Vec<AppEntry>>>,
+    loaded: Arc<AtomicBool>,
 }
 
 struct AppEntry {
@@ -20,33 +22,45 @@ struct AppEntry {
 
 impl AppSearchPlugin {
     pub fn new() -> Self {
-        let mut apps = Vec::new();
+        let apps = Arc::new(RwLock::new(Vec::new()));
+        let loaded = Arc::new(AtomicBool::new(false));
 
-        let user_start = std::env::var("APPDATA")
-            .map(|p| PathBuf::from(p).join("Microsoft\\Windows\\Start Menu\\Programs"))
-            .ok();
+        let apps_clone = apps.clone();
+        let loaded_clone = loaded.clone();
+        std::thread::spawn(move || {
+            let mut app_list = Vec::new();
+            scan_start_menu(&mut app_list);
+            *apps_clone.write().unwrap() = app_list;
+            loaded_clone.store(true, Ordering::Release);
+        });
 
-        let common_start = std::env::var("PROGRAMDATA")
-            .map(|p| PathBuf::from(p).join("Microsoft\\Windows\\Start Menu\\Programs"))
-            .ok();
-
-        if let Some(dir) = &user_start {
-            eprintln!("[APP_SEARCH] 扫描用户开始菜单: {}", dir.display());
-            scan_lnks(dir, &mut apps);
-        }
-        if let Some(dir) = &common_start {
-            eprintln!("[APP_SEARCH] 扫描公共开始菜单: {}", dir.display());
-            scan_lnks(dir, &mut apps);
-        }
-
-        // Deduplicate by name (case-insensitive)
-        apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-        apps.dedup_by(|a, b| a.name.eq_ignore_ascii_case(&b.name));
-
-        eprintln!("[APP_SEARCH] 加载应用总数: {}", apps.len());
-
-        Self { apps }
+        Self { apps, loaded }
     }
+}
+
+fn scan_start_menu(apps: &mut Vec<AppEntry>) {
+    let user_start = std::env::var("APPDATA")
+        .map(|p| PathBuf::from(p).join("Microsoft\\Windows\\Start Menu\\Programs"))
+        .ok();
+
+    let common_start = std::env::var("PROGRAMDATA")
+        .map(|p| PathBuf::from(p).join("Microsoft\\Windows\\Start Menu\\Programs"))
+        .ok();
+
+    if let Some(dir) = &user_start {
+        eprintln!("[APP_SEARCH] 扫描用户开始菜单: {}", dir.display());
+        scan_lnks(dir, apps);
+    }
+    if let Some(dir) = &common_start {
+        eprintln!("[APP_SEARCH] 扫描公共开始菜单: {}", dir.display());
+        scan_lnks(dir, apps);
+    }
+
+    // Deduplicate by name (case-insensitive)
+    apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    apps.dedup_by(|a, b| a.name.eq_ignore_ascii_case(&b.name));
+
+    eprintln!("[APP_SEARCH] 加载应用总数: {}", apps.len());
 }
 
 fn scan_lnks(dir: &Path, apps: &mut Vec<AppEntry>) {
@@ -216,9 +230,9 @@ impl Plugin for AppSearchPlugin {
             return Vec::new();
         }
 
+        let apps = self.apps.read().unwrap();
         let input_lower = input.to_lowercase();
-        let mut results: Vec<SearchResult> = self
-            .apps
+        let mut results: Vec<SearchResult> = apps
             .iter()
             .filter_map(|app| {
                 let relevance = fuzzy_match(&input_lower, &app.name);
@@ -252,13 +266,22 @@ impl Plugin for AppSearchPlugin {
 mod tests {
     use super::*;
 
+    use std::sync::Arc;
+
     #[test]
     fn relevance_scoring() {
-        let plugin = AppSearchPlugin { apps: vec![
+        use std::sync::RwLock;
+        use std::sync::atomic::AtomicBool;
+
+        let apps = vec![
             AppEntry { name: "Chrome".to_string(), target_path: "C:\\chrome.exe".to_string(), lnk_path: String::new(), icon_path: String::new() },
             AppEntry { name: "Chrome Canary".to_string(), target_path: "C:\\canary.exe".to_string(), lnk_path: String::new(), icon_path: String::new() },
             AppEntry { name: "Visual Studio Code".to_string(), target_path: "C:\\code.exe".to_string(), lnk_path: String::new(), icon_path: String::new() },
-        ]};
+        ];
+        let plugin = AppSearchPlugin {
+            apps: Arc::new(RwLock::new(apps)),
+            loaded: Arc::new(AtomicBool::new(true)),
+        };
 
         // Exact match
         let results = plugin.query("chrome");

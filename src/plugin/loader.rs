@@ -21,8 +21,6 @@ pub struct DynamicPlugin {
     fn_query: FnQuery,
     fn_free: FnFree,
     fn_invoke: Option<FnInvoke>,
-    cached_id: String,
-    cached_name: String,
 }
 
 unsafe impl Send for DynamicPlugin {}
@@ -66,10 +64,16 @@ impl DynamicPlugin {
             }
 
             let id_ptr = fn_get_id(plugin_ptr);
-            let cached_id = CStr::from_ptr(id_ptr).to_str().unwrap_or("").to_string();
+            let dll_id = CStr::from_ptr(id_ptr).to_str().unwrap_or("");
+            if dll_id != scanned.manifest.id {
+                return Err(format!(
+                    "DLL 插件 id '{}' 与 plugin.json id '{}' 不匹配",
+                    dll_id, scanned.manifest.id
+                ));
+            }
 
             let name_ptr = fn_get_name(plugin_ptr);
-            let cached_name = CStr::from_ptr(name_ptr).to_str().unwrap_or("").to_string();
+            let _dll_name = CStr::from_ptr(name_ptr).to_str().unwrap_or("");
 
             Ok(Self {
                 manifest: scanned.manifest.clone(),
@@ -80,15 +84,13 @@ impl DynamicPlugin {
                 fn_query,
                 fn_free,
                 fn_invoke,
-                cached_id,
-                cached_name,
             })
         }
     }
 
     pub fn invoke(&self, command: &str, args: &str) -> Result<String, String> {
         let fn_invoke = self.fn_invoke
-            .ok_or_else(|| format!("插件 {} 不支持 plugin_invoke", self.cached_id))?;
+            .ok_or_else(|| format!("插件 {} 不支持 plugin_invoke", self.manifest.id))?;
 
         unsafe {
             let c_cmd = CString::new(command).map_err(|e| format!("命令编码失败: {}", e))?;
@@ -106,10 +108,6 @@ impl DynamicPlugin {
         }
     }
 
-    pub fn has_renderer(&self) -> bool {
-        self.manifest.renderer.is_some()
-    }
-
     pub fn renderer_path(&self) -> Option<PathBuf> {
         self.manifest.renderer.as_ref().map(|r| self.plugin_dir.join(r))
     }
@@ -121,11 +119,27 @@ impl DynamicPlugin {
 
 impl Plugin for DynamicPlugin {
     fn id(&self) -> &str {
-        &self.cached_id
+        &self.manifest.id
     }
 
     fn name(&self) -> &str {
-        &self.cached_name
+        &self.manifest.name
+    }
+
+    fn version(&self) -> &str {
+        &self.manifest.version
+    }
+
+    fn description(&self) -> &str {
+        &self.manifest.description
+    }
+
+    fn author(&self) -> &str {
+        &self.manifest.author
+    }
+
+    fn has_renderer(&self) -> bool {
+        self.manifest.renderer.is_some()
     }
 
     fn query(&self, input: &str) -> Vec<SearchResult> {
@@ -164,38 +178,8 @@ impl Drop for DynamicPlugin {
 }
 
 fn parse_search_results(json: &str) -> Vec<SearchResult> {
-    #[derive(serde::Deserialize)]
-    struct Raw {
-        plugin_id: String,
-        title: String,
-        subtitle: String,
-        relevance: f64,
-        #[serde(default)]
-        icon_path: String,
-        #[serde(default = "default_execute")]
-        action: String,
-        #[serde(default = "default_template")]
-        template: String,
-    }
-
-    fn default_execute() -> String {
-        "execute".to_string()
-    }
-
-    fn default_template() -> String {
-        "default".to_string()
-    }
-
-    match serde_json::from_str::<Vec<Raw>>(json) {
-        Ok(raw) => raw.into_iter().map(|r| SearchResult {
-            plugin_id: r.plugin_id,
-            title: r.title,
-            subtitle: r.subtitle,
-            relevance: r.relevance,
-            icon_path: r.icon_path,
-            action: r.action,
-            template: r.template,
-        }).collect(),
+    match serde_json::from_str::<Vec<SearchResult>>(json) {
+        Ok(results) => results,
         Err(e) => {
             eprintln!("[LOADER] 解析 DLL 查询结果 JSON 失败: {}", e);
             Vec::new()

@@ -1,14 +1,18 @@
 use http::Request;
 use tauri::UriSchemeResponder;
 
+fn cors_response() -> http::response::Builder {
+    http::Response::builder()
+        .header("Access-Control-Allow-Origin", "*")
+        .header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        .header("Access-Control-Allow-Headers", "*")
+}
+
 pub fn handle_request(request: Request<Vec<u8>>, responder: UriSchemeResponder) {
     if request.method() == http::Method::OPTIONS {
         responder.respond(
-            http::Response::builder()
+            cors_response()
                 .status(http::StatusCode::NO_CONTENT)
-                .header("Access-Control-Allow-Origin", "*")
-                .header("Access-Control-Allow-Methods", "GET, OPTIONS")
-                .header("Access-Control-Allow-Headers", "*")
                 .header("Access-Control-Max-Age", "86400")
                 .body(Vec::<u8>::new())
                 .unwrap(),
@@ -24,10 +28,7 @@ pub fn handle_request(request: Request<Vec<u8>>, responder: UriSchemeResponder) 
         Ok(data) => {
             let mime = mime_guess::from_path(&path).first_or_octet_stream();
             responder.respond(
-                http::Response::builder()
-                    .header("Access-Control-Allow-Origin", "*")
-                    .header("Access-Control-Allow-Methods", "GET, OPTIONS")
-                    .header("Access-Control-Allow-Headers", "*")
+                cors_response()
                     .header(http::header::CONTENT_TYPE, mime.essence_str())
                     .body(data)
                     .unwrap(),
@@ -36,9 +37,8 @@ pub fn handle_request(request: Request<Vec<u8>>, responder: UriSchemeResponder) 
         Err(e) => {
             eprintln!("[rs-asset] read error: {}", e);
             responder.respond(
-                http::Response::builder()
+                cors_response()
                     .status(http::StatusCode::NOT_FOUND)
-                    .header("Access-Control-Allow-Origin", "*")
                     .header(http::header::CONTENT_TYPE, "text/plain")
                     .body(format!("path={} err={}", path, e).into_bytes())
                     .unwrap(),
