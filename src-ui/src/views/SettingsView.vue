@@ -433,8 +433,4 @@ function handleKeyRecord(e: KeyboardEvent) {
 #app {
   border-radius: 0;
 }
-
-#app::before {
-  border-radius: 0;
-}
 </style>
