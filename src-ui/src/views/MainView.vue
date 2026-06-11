@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import SearchBar from '../components/SearchBar.vue'
 import ResultList from '../components/ResultList.vue'
 import PluginRenderer from '../components/PluginRenderer.vue'
@@ -215,6 +215,12 @@ function handleKeydown(e: KeyboardEvent) {
     return
   }
 }
+
+watch(selectedIndex, async () => {
+  await nextTick()
+  const el = document.querySelector('.result-item.selected')
+  el?.scrollIntoView({ block: 'nearest' })
+})
 
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
