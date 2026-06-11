@@ -79,6 +79,7 @@ async function executeResult(index: number) {
     return
   }
   await invoke('execute_result', { subtitle: result.subtitle })
+  hideWindow()
 }
 
 function deactivatePlugin() {
@@ -128,6 +129,7 @@ function contextOpen() {
   const r = contextMenu.value?.result
   if (!r) return
   invoke('execute_result', { subtitle: r.subtitle }).catch(console.error)
+  hideWindow()
   closeContextMenu()
 }
 
