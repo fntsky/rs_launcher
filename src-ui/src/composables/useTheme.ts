@@ -10,15 +10,17 @@ export interface RSTheme {
 const DARK_THEME: RSTheme = {
   mode: 'dark',
   vars: {
-    '--bg-primary': '#1e1e22',
-    '--bg-secondary': '#2a2a30',
-    '--bg-hover': '#3a3a42',
-    '--bg-selected': '#2a3a5a',
-    '--text-primary': '#e0e0e0',
-    '--text-secondary': '#6a6a72',
-    '--text-hint': '#585860',
-    '--accent': '#4a90d9',
-    '--divider': '#3a3a42',
+    '--bg-primary': '#1c1c1e',
+    '--bg-secondary': '#2c2c2e',
+    '--bg-hover': '#3a3a3c',
+    '--bg-selected': '#38383a',
+    '--text-primary': '#ffffff',
+    '--text-secondary': '#8e8e93',
+    '--text-hint': '#636366',
+    '--accent': '#0a84ff',
+    '--divider': '#38383a',
+    '--app-opacity': '0.6',
+    '--app-blur': '0px',
   },
 }
 

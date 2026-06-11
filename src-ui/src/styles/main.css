@@ -3,15 +3,17 @@
    ============================================================ */
 
 :root {
-  --bg-primary: #1e1e22;
-  --bg-secondary: #2a2a30;
-  --bg-hover: #3a3a42;
-  --bg-selected: #2a3a5a;
-  --text-primary: #e0e0e0;
-  --text-secondary: #6a6a72;
-  --text-hint: #585860;
-  --accent: #4a90d9;
-  --divider: #3a3a42;
+  --bg-primary: #1c1c1e;
+  --bg-secondary: #2c2c2e;
+  --bg-hover: #3a3a3c;
+  --bg-selected: #38383a;
+  --text-primary: #ffffff;
+  --text-secondary: #8e8e93;
+  --text-hint: #636366;
+  --accent: #0a84ff;
+  --divider: #38383a;
+  --app-opacity: 0.6;
+  --app-blur: 0px;
   --border-radius: 12px;
   --transition-fast: 0.15s ease;
   --transition-medium: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -37,13 +39,27 @@ html, body {
 }
 
 #app {
+  position: relative;
+  isolation: isolate;
   width: 100%;
   height: 100%;
-  background: var(--bg-primary);
+  background: transparent;
   border-radius: 14px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+#app::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--bg-primary);
+  opacity: var(--app-opacity, 1);
+  backdrop-filter: blur(var(--app-blur, 0px));
+  -webkit-backdrop-filter: blur(var(--app-blur, 0px));
+  z-index: -1;
+  border-radius: 14px;
 }
 
 /* Search Bar */
