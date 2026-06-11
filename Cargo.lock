@@ -2522,6 +2522,7 @@ dependencies = [
  "http",
  "libloading 0.8.9",
  "mime_guess",
+ "once_cell",
  "percent-encoding",
  "pinyin",
  "png 0.17.16",

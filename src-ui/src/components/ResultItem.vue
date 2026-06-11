@@ -23,7 +23,6 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useTauri } from '../composables/useTauri'
 import type { SearchResult } from '../types'
 
 interface Props {
@@ -38,50 +37,30 @@ const emit = defineEmits<{
   contextmenu: [e: MouseEvent]
 }>()
 
-const { convertFileSrc } = useTauri()
-
 function handleContextMenu(e: MouseEvent) {
   emit('contextmenu', e)
 }
 
-const icon = computed(() => props.result.icon_path || '📄')
-
-// Check if icon_path is a base64 data URL
-const isDataUrl = computed(() => {
+const isAssetUrl = computed(() => {
   const path = props.result.icon_path
-  return path && path.startsWith('data:')
+  return path && path.startsWith('rs-asset://')
 })
 
-// Check if icon_path is an actual image file path (not emoji, not data URL)
-const isImageIcon = computed(() => {
-  const path = props.result.icon_path
-  if (!path) return false
-  if (isDataUrl.value) return true
-  // If it's a short string (likely emoji) or single ASCII char, not an image
-  if (path.length <= 2) return false
-  // If it contains only ASCII and is short, likely not a file path
-  if (path.match(/^[\x00-\x7F]+$/) && path.length < 10) return false
-  return true
-})
+const isImageIcon = computed(() => isAssetUrl.value)
 
 const isEmojiIcon = computed(() => {
   const path = props.result.icon_path
-  if (!path) return false
-  if (isDataUrl.value) return false
-  // Short strings are treated as emoji/icons
+  if (!path || isAssetUrl.value) return false
   return path.length <= 2 || (path.match(/^[\x00-\x7F]+$/) && path.length < 10)
 })
 
+const icon = computed(() => {
+  if (isEmojiIcon.value) return props.result.icon_path
+  return '📄'
+})
+
 const iconSrc = computed(() => {
-  const path = props.result.icon_path
-  if (!path) return ''
-  if (isDataUrl.value) {
-    return path
-  }
-  try {
-    return convertFileSrc(path)
-  } catch {
-    return ''
-  }
+  if (isAssetUrl.value) return props.result.icon_path
+  return ''
 })
 </script>

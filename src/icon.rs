@@ -1,9 +1,74 @@
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
+use std::sync::Mutex;
+use once_cell::sync::Lazy;
+use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 
-/// Extract icon from an executable file and save as PNG to temp directory.
-/// Returns the path to the saved PNG file, or empty string on failure.
+static ICON_MEM_CACHE: Lazy<Mutex<HashMap<String, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn cache_dir() -> PathBuf {
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            return exe_dir.join(".icons_cache");
+        }
+    }
+    PathBuf::from(".icons_cache")
+}
+
+fn cache_key(exe_path: &str) -> String {
+    format!("app_{:016x}", seahash::hash(exe_path.as_bytes()))
+}
+
+fn cache_path(key: &str) -> PathBuf {
+    cache_dir().join(format!("{}.png", key))
+}
+
+const URL_ENCODE_SET: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'<')
+    .add(b'>')
+    .add(b'?')
+    .add(b'`')
+    .add(b'{')
+    .add(b'}')
+    .add(b':')
+    .add(b';')
+    .add(b'=')
+    .add(b'@')
+    .add(b'[')
+    .add(b']')
+    .add(b'^')
+    .add(b'|')
+    .add(b'%');
+
+fn path_to_asset_url(path: &Path) -> String {
+    let s = path.to_string_lossy().replace('\\', "/");
+    let encoded = utf8_percent_encode(&s, URL_ENCODE_SET).to_string();
+    format!("rs-asset://localhost/{}", encoded)
+}
+
+fn read_disk_cache(key: &str) -> Option<String> {
+    let path = cache_path(key);
+    if path.exists() {
+        Some(path_to_asset_url(&path))
+    } else {
+        None
+    }
+}
+
+fn write_disk_cache(key: &str, png_bytes: &[u8]) {
+    let dir = cache_dir();
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    let path = dir.join(format!("{}.png", key));
+    let _ = std::fs::write(&path, png_bytes);
+}
+
 pub fn extract_icon_to_png(exe_path: &str) -> String {
     if exe_path.is_empty() || !exe_path.to_lowercase().ends_with(".exe") {
         return String::new();
@@ -13,14 +78,28 @@ pub fn extract_icon_to_png(exe_path: &str) -> String {
         return String::new();
     }
 
+    let key = cache_key(exe_path);
+
+    if let Ok(cache) = ICON_MEM_CACHE.lock() {
+        if let Some(cached) = cache.get(&key) {
+            return cached.clone();
+        }
+    }
+
+    if let Some(cached) = read_disk_cache(&key) {
+        if let Ok(mut cache) = ICON_MEM_CACHE.lock() {
+            cache.insert(key, cached.clone());
+        }
+        return cached;
+    }
+
     unsafe {
-        // Initialize COM
         let hr = windows_sys::Win32::System::Com::CoInitializeEx(
             std::ptr::null(),
             windows_sys::Win32::System::Com::COINIT_APARTMENTTHREADED as u32,
         );
 
-        let result = extract_icon_to_png_inner(exe_path);
+        let result = extract_icon_to_png_inner(exe_path, &key);
 
         if hr == 0 {
             windows_sys::Win32::System::Com::CoUninitialize();
@@ -30,7 +109,7 @@ pub fn extract_icon_to_png(exe_path: &str) -> String {
     }
 }
 
-unsafe fn extract_icon_to_png_inner(exe_path: &str) -> String {
+unsafe fn extract_icon_to_png_inner(exe_path: &str, key: &str) -> String {
     use windows_sys::Win32::UI::Shell::ExtractIconW;
     use windows_sys::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, ICONINFO};
     use windows_sys::Win32::Graphics::Gdi::{GetDIBits, SelectObject, DeleteObject, DeleteDC, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, GetObjectW, BITMAP};
@@ -41,7 +120,6 @@ unsafe fn extract_icon_to_png_inner(exe_path: &str) -> String {
         .chain(std::iter::once(0))
         .collect();
 
-    // Extract icon (index 0 = first icon)
     let hicon = ExtractIconW(
         HWND::default(),
         wide_path.as_ptr(),
@@ -49,23 +127,19 @@ unsafe fn extract_icon_to_png_inner(exe_path: &str) -> String {
     );
 
     if hicon.is_null() || hicon as isize <= 1 {
-        // -1 means no icons, 0 means invalid
         return String::new();
     }
 
-    // Get icon info
     let mut icon_info: ICONINFO = std::mem::zeroed();
     if GetIconInfo(hicon, &mut icon_info) == 0 {
         DestroyIcon(hicon);
         return String::new();
     }
 
-    // We'll use the color bitmap (hbmColor)
     let hbm_color = icon_info.hbmColor;
     let hbm_mask = icon_info.hbmMask;
 
     if hbm_color.is_null() {
-        // Try to use mask if no color bitmap
         if !hbm_mask.is_null() {
             DeleteObject(hbm_mask as _);
         }
@@ -73,7 +147,6 @@ unsafe fn extract_icon_to_png_inner(exe_path: &str) -> String {
         return String::new();
     }
 
-    // Get bitmap dimensions
     let mut bm: BITMAP = std::mem::zeroed();
     let bm_size = GetObjectW(
         hbm_color as _,
@@ -93,7 +166,6 @@ unsafe fn extract_icon_to_png_inner(exe_path: &str) -> String {
     let width = bm.bmWidth;
     let height = bm.bmHeight;
 
-    // Create DC and get bits
     let hdc = windows_sys::Win32::Graphics::Gdi::CreateCompatibleDC(std::ptr::null_mut());
     if hdc.is_null() {
         DeleteObject(hbm_color as _);
@@ -106,13 +178,12 @@ unsafe fn extract_icon_to_png_inner(exe_path: &str) -> String {
 
     let old_bmp = SelectObject(hdc, hbm_color as _);
 
-    // Prepare BITMAPINFO for GetDIBits
     let mut bmi: BITMAPINFO = std::mem::zeroed();
     bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
     bmi.bmiHeader.biWidth = width;
-    bmi.bmiHeader.biHeight = -height; // top-down
+    bmi.bmiHeader.biHeight = -height;
     bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32; // BGRA
+    bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
 
     let row_size = (width * 4) as usize;
@@ -129,7 +200,6 @@ unsafe fn extract_icon_to_png_inner(exe_path: &str) -> String {
         DIB_RGB_COLORS,
     );
 
-    // Restore and cleanup GDI objects
     SelectObject(hdc, old_bmp);
     DeleteDC(hdc);
     DeleteObject(hbm_color as _);
@@ -142,30 +212,34 @@ unsafe fn extract_icon_to_png_inner(exe_path: &str) -> String {
         return String::new();
     }
 
-    // Convert BGRA to RGBA for PNG (straight alpha, no premultiplication)
     for chunk in pixels.chunks_exact_mut(4) {
-        // BGRA -> RGBA: swap B and R channels
         chunk.swap(0, 2);
     }
 
-    // Encode as PNG and return base64 data URL
-    encode_png_to_base64(&pixels, width as u32, height as u32)
+    let png_bytes = match encode_png(&pixels, width as u32, height as u32) {
+        Some(bytes) => bytes,
+        None => return String::new(),
+    };
+
+    let cache_path = cache_path(key);
+    write_disk_cache(key, &png_bytes);
+
+    let url = path_to_asset_url(&cache_path);
+    if let Ok(mut cache) = ICON_MEM_CACHE.lock() {
+        cache.insert(key.to_string(), url.clone());
+    }
+
+    url
 }
 
-fn encode_png_to_base64(pixels: &[u8], width: u32, height: u32) -> String {
+fn encode_png(pixels: &[u8], width: u32, height: u32) -> Option<Vec<u8>> {
     let mut png_buf = Vec::new();
     {
         let mut encoder = png::Encoder::new(std::io::Cursor::new(&mut png_buf), width, height);
         encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
-        let mut writer = match encoder.write_header() {
-            Ok(w) => w,
-            Err(_) => return String::new(),
-        };
-        if writer.write_image_data(pixels).is_err() {
-            return String::new();
-        }
+        let mut writer = encoder.write_header().ok()?;
+        writer.write_image_data(pixels).ok()?;
     }
-
-    format!("data:image/png;base64,{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &png_buf))
+    Some(png_buf)
 }
