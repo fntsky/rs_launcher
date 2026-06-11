@@ -43,7 +43,7 @@ function handleContextMenu(e: MouseEvent) {
 
 const isAssetUrl = computed(() => {
   const path = props.result.icon_path
-  return path && path.startsWith('rs-asset://')
+  return path && (path.startsWith('rs-asset://') || path.startsWith('http://rs-asset.localhost'))
 })
 
 const isImageIcon = computed(() => isAssetUrl.value)

@@ -333,7 +333,7 @@ pub fn run() {
     let engine = Arc::new(PluginEngine::new(registry.clone()));
     let config = config::AppConfig::load();
 
-    tauri::Builder::default()
+tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .register_asynchronous_uri_scheme_protocol("rs-asset", |_ctx, request, responder| {
             rs_asset::handle_request(request, responder);

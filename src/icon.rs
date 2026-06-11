@@ -48,7 +48,7 @@ const URL_ENCODE_SET: &AsciiSet = &CONTROLS
 fn path_to_asset_url(path: &Path) -> String {
     let s = path.to_string_lossy().replace('\\', "/");
     let encoded = utf8_percent_encode(&s, URL_ENCODE_SET).to_string();
-    format!("rs-asset://localhost/{}", encoded)
+    format!("http://rs-asset.localhost/{}", encoded)
 }
 
 fn read_disk_cache(key: &str) -> Option<String> {
@@ -70,7 +70,7 @@ fn write_disk_cache(key: &str, png_bytes: &[u8]) {
 }
 
 pub fn extract_icon_to_png(exe_path: &str) -> String {
-    if exe_path.is_empty() || !exe_path.to_lowercase().ends_with(".exe") {
+    if exe_path.is_empty() {
         return String::new();
     }
 
@@ -110,25 +110,28 @@ pub fn extract_icon_to_png(exe_path: &str) -> String {
 }
 
 unsafe fn extract_icon_to_png_inner(exe_path: &str, key: &str) -> String {
-    use windows_sys::Win32::UI::Shell::ExtractIconW;
+    use windows_sys::Win32::UI::Shell::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON};
     use windows_sys::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, ICONINFO};
     use windows_sys::Win32::Graphics::Gdi::{GetDIBits, SelectObject, DeleteObject, DeleteDC, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, GetObjectW, BITMAP};
-    use windows_sys::Win32::Foundation::HWND;
 
     let wide_path: Vec<u16> = OsStr::new(exe_path)
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
 
-    let hicon = ExtractIconW(
-        HWND::default(),
+    let mut shfi: SHFILEINFOW = std::mem::zeroed();
+    let ret = SHGetFileInfoW(
         wide_path.as_ptr(),
         0,
+        &mut shfi,
+        std::mem::size_of::<SHFILEINFOW>() as u32,
+        SHGFI_ICON,
     );
 
-    if hicon.is_null() || hicon as isize <= 1 {
+    if ret == 0 || shfi.hIcon.is_null() {
         return String::new();
     }
+    let hicon = shfi.hIcon;
 
     let mut icon_info: ICONINFO = std::mem::zeroed();
     if GetIconInfo(hicon, &mut icon_info) == 0 {

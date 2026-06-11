@@ -2,8 +2,6 @@ use crate::plugin::{Plugin, SearchResult};
 use crate::search::fuzzy::fuzzy_match;
 use crate::icon;
 
-use std::ffi::OsStr;
-use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock, atomic::{AtomicBool, Ordering}};
 
@@ -15,7 +13,6 @@ pub struct AppSearchPlugin {
 
 struct AppEntry {
     name: String,
-    target_path: String,
     lnk_path: String,
     icon_path: String,
 }
@@ -71,13 +68,12 @@ fn scan_lnks(dir: &Path, apps: &mut Vec<AppEntry>) {
                 scan_lnks(&path, apps);
             } else if path.extension().and_then(|e| e.to_str()) == Some("lnk") {
                 if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
-                    let target = resolve_lnk_target(&path);
-                    eprintln!("[APP_SEARCH]   发现: {} -> {}", name, if target.is_empty() { "(未知目标)" } else { &target });
-                    let icon_path = icon::extract_icon_to_png(&target);
+                    let lnk_path = path.to_string_lossy().to_string();
+                    eprintln!("[APP_SEARCH]   发现: {} -> {}", name, &lnk_path);
+                    let icon_path = icon::extract_icon_to_png(&lnk_path);
                     apps.push(AppEntry {
                         name: name.to_string(),
-                        target_path: target,
-                        lnk_path: path.to_string_lossy().to_string(),
+                        lnk_path,
                         icon_path,
                     });
                 }
@@ -86,135 +82,6 @@ fn scan_lnks(dir: &Path, apps: &mut Vec<AppEntry>) {
     }
 }
 
-/// 使用 COM IShellLinkW 解析 .lnk 目标路径
-fn resolve_lnk_target(lnk_path: &Path) -> String {
-    unsafe {
-        // Initialize COM (S_OK=0, S_FALSE=1 means already initialized)
-        let hr = windows_sys::Win32::System::Com::CoInitializeEx(
-            std::ptr::null(),
-            windows_sys::Win32::System::Com::COINIT_APARTMENTTHREADED as u32,
-        );
-
-        let result = resolve_lnk_target_inner(lnk_path);
-
-        // Only uninitialize if we successfully initialized (S_OK)
-        if hr == 0 {
-            windows_sys::Win32::System::Com::CoUninitialize();
-        }
-
-        result
-    }
-}
-
-unsafe fn resolve_lnk_target_inner(lnk_path: &Path) -> String {
-    use windows_sys::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
-
-    // CLSID_ShellLink: 00021401-0000-0000-C000-000000000046
-    let clsid_shell_link = windows_sys::core::GUID::from_u128(0x00021401_0000_0000_C000_000000000046);
-    // IID_IShellLinkW: 000214F9-0000-0000-C000-000000000046
-    let iid_ishell_link = windows_sys::core::GUID::from_u128(0x000214F9_0000_0000_C000_000000000046);
-    // IID_IPersistFile: 0000010B-0000-0000-C000-000000000046
-    let iid_ipersist_file = windows_sys::core::GUID::from_u128(0x0000010B_0000_0000_C000_000000000046);
-
-    let mut psl: *mut std::ffi::c_void = std::ptr::null_mut();
-    let hr = CoCreateInstance(
-        &clsid_shell_link,
-        std::ptr::null_mut(),
-        CLSCTX_INPROC_SERVER,
-        &iid_ishell_link,
-        &mut psl,
-    );
-
-    if hr != 0 || psl.is_null() {
-        return String::new();
-    }
-
-    // Query IPersistFile
-    let mut ppf: *mut std::ffi::c_void = std::ptr::null_mut();
-    let vtbl = &*(*(psl as *mut *mut IShellLinkWVTable));
-    let hr = (vtbl.query_interface)(psl, &iid_ipersist_file, &mut ppf);
-
-    if hr != 0 || ppf.is_null() {
-        (vtbl.release)(psl);
-        return String::new();
-    }
-
-    // Load .lnk file
-    let wide_path: Vec<u16> = OsStr::new(lnk_path)
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-
-    let ppf_vtbl = &*(*(ppf as *mut *mut IPersistFileVTable));
-    let hr = (ppf_vtbl.load)(ppf, wide_path.as_ptr(), 0);
-
-    if hr != 0 {
-        (ppf_vtbl.release)(ppf);
-        (vtbl.release)(psl);
-        return String::new();
-    }
-
-    // Resolve the link (get target path)
-    let mut target_buf = [0u16; 260];
-    let hr = (vtbl.get_path)(
-        psl,
-        target_buf.as_mut_ptr(),
-        target_buf.len() as i32,
-        std::ptr::null_mut(),
-        0, // SLGP_RAWPATH
-    );
-
-    // Cleanup
-    (ppf_vtbl.release)(ppf);
-    (vtbl.release)(psl);
-
-    if hr != 0 {
-        return String::new();
-    }
-
-    let end = target_buf.iter().position(|&c| c == 0).unwrap_or(260);
-    String::from_utf16_lossy(&target_buf[..end])
-}
-
-// COM vtable definitions for IShellLinkW and IPersistFile
-
-#[repr(C)]
-struct IShellLinkWVTable {
-    query_interface: unsafe extern "system" fn(*mut std::ffi::c_void, *const windows_sys::core::GUID, *mut *mut std::ffi::c_void) -> i32,
-    add_ref: unsafe extern "system" fn(*mut std::ffi::c_void) -> u32,
-    release: unsafe extern "system" fn(*mut std::ffi::c_void) -> u32,
-    get_path: unsafe extern "system" fn(*mut std::ffi::c_void, *mut u16, i32, *mut std::ffi::c_void, u32) -> i32,
-    get_id_list: unsafe extern "system" fn(*mut std::ffi::c_void, *mut *mut std::ffi::c_void) -> i32,
-    set_id_list: unsafe extern "system" fn(*mut std::ffi::c_void, *const std::ffi::c_void) -> i32,
-    get_description: unsafe extern "system" fn(*mut std::ffi::c_void, *mut u16, i32) -> i32,
-    set_description: unsafe extern "system" fn(*mut std::ffi::c_void, *const u16) -> i32,
-    get_working_directory: unsafe extern "system" fn(*mut std::ffi::c_void, *mut u16, i32) -> i32,
-    set_working_directory: unsafe extern "system" fn(*mut std::ffi::c_void, *const u16) -> i32,
-    get_arguments: unsafe extern "system" fn(*mut std::ffi::c_void, *mut u16, i32) -> i32,
-    set_arguments: unsafe extern "system" fn(*mut std::ffi::c_void, *const u16) -> i32,
-    get_hotkey: unsafe extern "system" fn(*mut std::ffi::c_void, *mut u16) -> i32,
-    set_hotkey: unsafe extern "system" fn(*mut std::ffi::c_void, u16) -> i32,
-    get_show_cmd: unsafe extern "system" fn(*mut std::ffi::c_void, *mut i32) -> i32,
-    set_show_cmd: unsafe extern "system" fn(*mut std::ffi::c_void, i32) -> i32,
-    get_icon_location: unsafe extern "system" fn(*mut std::ffi::c_void, *mut u16, i32, *mut i32) -> i32,
-    set_icon_location: unsafe extern "system" fn(*mut std::ffi::c_void, *const u16, i32) -> i32,
-    set_relative_path: unsafe extern "system" fn(*mut std::ffi::c_void, *const u16, u32) -> i32,
-    resolve: unsafe extern "system" fn(*mut std::ffi::c_void, windows_sys::Win32::Foundation::HWND, u32) -> i32,
-    set_path: unsafe extern "system" fn(*mut std::ffi::c_void, *const u16) -> i32,
-}
-
-#[repr(C)]
-struct IPersistFileVTable {
-    query_interface: unsafe extern "system" fn(*mut std::ffi::c_void, *const windows_sys::core::GUID, *mut *mut std::ffi::c_void) -> i32,
-    add_ref: unsafe extern "system" fn(*mut std::ffi::c_void) -> u32,
-    release: unsafe extern "system" fn(*mut std::ffi::c_void) -> u32,
-    get_class_id: unsafe extern "system" fn(*mut std::ffi::c_void, *mut windows_sys::core::GUID) -> i32,
-    is_dirty: unsafe extern "system" fn(*mut std::ffi::c_void) -> i32,
-    load: unsafe extern "system" fn(*mut std::ffi::c_void, *const u16, u32) -> i32,
-    save: unsafe extern "system" fn(*mut std::ffi::c_void, *const u16, i32) -> i32,
-    save_completed: unsafe extern "system" fn(*mut std::ffi::c_void, *const u16) -> i32,
-    get_cur_file: unsafe extern "system" fn(*mut std::ffi::c_void, *mut *mut u16) -> i32,
-}
 
 impl Plugin for AppSearchPlugin {
     fn id(&self) -> &str {
@@ -244,11 +111,7 @@ impl Plugin for AppSearchPlugin {
                 Some(SearchResult {
                     plugin_id: self.id().to_string(),
                     title: app.name.clone(),
-                    subtitle: if app.target_path.is_empty() {
-                        app.lnk_path.clone()
-                    } else {
-                        app.target_path.clone()
-                    },
+                    subtitle: app.lnk_path.clone(),
                     relevance,
                     icon_path: app.icon_path.clone(),
                     action: "execute".to_string(),
@@ -274,9 +137,9 @@ mod tests {
         use std::sync::atomic::AtomicBool;
 
         let apps = vec![
-            AppEntry { name: "Chrome".to_string(), target_path: "C:\\chrome.exe".to_string(), lnk_path: String::new(), icon_path: String::new() },
-            AppEntry { name: "Chrome Canary".to_string(), target_path: "C:\\canary.exe".to_string(), lnk_path: String::new(), icon_path: String::new() },
-            AppEntry { name: "Visual Studio Code".to_string(), target_path: "C:\\code.exe".to_string(), lnk_path: String::new(), icon_path: String::new() },
+            AppEntry { name: "Chrome".to_string(), lnk_path: "C:\\Chrome.lnk".to_string(), icon_path: String::new() },
+            AppEntry { name: "Chrome Canary".to_string(), lnk_path: "C:\\Chrome Canary.lnk".to_string(), icon_path: String::new() },
+            AppEntry { name: "Visual Studio Code".to_string(), lnk_path: "C:\\Visual Studio Code.lnk".to_string(), icon_path: String::new() },
         ];
         let plugin = AppSearchPlugin {
             apps: Arc::new(RwLock::new(apps)),
